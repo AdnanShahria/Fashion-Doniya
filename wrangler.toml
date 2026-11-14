@@ -1,0 +1,53 @@
+name = "fashion-doniya"
+pages_build_output_dir = "frontend/dist"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Default / Local Dev bindings
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "3c457f8170e8424485270f016329a096"
+preview_id = "79990ec512c749dc99bbbe5d4afe148e"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "fashion-doniya"
+database_id = "d2e027d8-bf91-41c3-82ee-6b83b5629c24"
+migrations_dir = "backend/drizzle"
+
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "fashion-doniya"
+preview_bucket_name = "fashion-doniya-prev"
+
+# Production environment
+[env.production]
+[[env.production.kv_namespaces]]
+binding = "CACHE_KV"
+id = "3c457f8170e8424485270f016329a096"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "fashion-doniya"
+database_id = "d2e027d8-bf91-41c3-82ee-6b83b5629c24"
+migrations_dir = "backend/drizzle"
+
+[[env.production.r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "fashion-doniya"
+
+# Preview environment (shares fashion-doniya D1 due to account's 10-DB limit; uses dedicated preview KV & R2)
+[env.preview]
+[[env.preview.kv_namespaces]]
+binding = "CACHE_KV"
+id = "79990ec512c749dc99bbbe5d4afe148e"
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "fashion-doniya"
+database_id = "d2e027d8-bf91-41c3-82ee-6b83b5629c24"
+migrations_dir = "backend/drizzle"
+
+[[env.preview.r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "fashion-doniya-prev"

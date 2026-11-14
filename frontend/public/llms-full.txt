@@ -1,0 +1,11 @@
+# Fashion Doniya BD — Complete Storefront & Catalog Context
+
+## Brand Overview
+Fashion Doniya BD is an online boutique yard-fabric store in Bangladesh selling premium unstitched fabrics by the yard (গজ) in 0.25 and 0.5 yard increments.
+
+## Core Offerings
+- **3.5 Bahar (56–60 inch broad width)**: Ideal for flared gowns, lehengas, sarees, long kotis, and kamiz with fewer yards required.
+- **2.5 Bahar (36–44 inch standard width)**: Ideal for classic kamiz, short kamiz, kurtis, and tailored tops.
+- **Yardage Calculator**: Calculates exact fabric yardage required based on garment type, fabric width, and optional addons (inner, pant, palazzo, orna, blouse).
+- **Custom Tailoring & Measurements**: Customers can submit chest, waist, hip, length, sleeve, and shoulder measurements or request custom garment previews.
+- **Payments & Delivery**: Supports bKash, Nagad, and Cash on Delivery (COD) with Steadfast, Pathao, RedX, Paperfly, and Sundarban courier tracking across Bangladesh.

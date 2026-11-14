@@ -1,0 +1,20 @@
+name: Daily Auto-Crawl & Edge Cache Warmup
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run crawl
+        env:
+          SITE_URL: ${{ vars.SITE_URL || 'https://fashiondoniyabd.com' }}
+          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY || 'fashion-doniya-indexnow-key-2026' }}

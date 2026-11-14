@@ -1,0 +1,17 @@
+# Fashion Doniya BD
+
+> Premium Bangladeshi unstitched yardage fabric storefront specializing in 2.5 Bahar (36–44 inch) and 3.5 Bahar (56–60 inch) fabrics, smart yardage calculation, custom tailoring measurements, and nationwide courier delivery.
+
+## Key Pages
+- [Home](https://fashiondoniyabd.com/): Featured 2.5 & 3.5 Bahar fabric collections and editorial showcases
+- [Shop](https://fashiondoniyabd.com/shop): Complete yardage fabric catalog with width, category, and price filters
+- [3.5 Bahar Collection](https://fashiondoniyabd.com/fabric/3.5-bahar): Broad-width 56–60 inch fabrics
+- [2.5 Bahar Collection](https://fashiondoniyabd.com/fabric/2.5-bahar): Standard-width 36–44 inch fabrics
+- [Fabric Yard Calculator](https://fashiondoniyabd.com/calculator): Automatic yardage calculation by outfit type and addons
+- [Custom Design Studio](https://fashiondoniyabd.com/custom-design): Custom measurements and AI fabric-to-outfit preview
+- [Order Tracking](https://fashiondoniyabd.com/order-tracking): Real-time phone-verified order and courier tracking
+
+## Machine-Readable Feeds
+- [XML Sitemap](https://fashiondoniyabd.com/sitemap.xml)
+- [Google Merchant Feed](https://fashiondoniyabd.com/feed.xml)
+- [Full Context](https://fashiondoniyabd.com/llms-full.txt)

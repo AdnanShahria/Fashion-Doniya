@@ -1,0 +1,252 @@
+import { Hono } from 'hono';
+import type { AppEnv, Bindings } from '../types';
+
+export const aiRouter = new Hono<AppEnv>();
+
+const AI_CATEGORY_CONFIGS: Record<
+  string,
+  {
+    nameBn: string;
+    nameEn: string;
+    descBn: string;
+    yards35: number;
+    yards25: number;
+    prompt: string;
+  }
+> = {
+  short_kameez: {
+    nameBn: 'শর্ট কামিজ',
+    nameEn: 'Short Kameez',
+    descBn: 'ট্রেন্ডি থাই-লেন্থ কাট, সাইড স্লিট ও ৩/৪ হাতা',
+    yards35: 1.5,
+    yards25: 2.0,
+    prompt:
+      'Professional fashion studio product photography of a standalone Short Kameez tailored strictly from the EXACT fabric in the input image. Isolated ghost-mannequin display on neutral off-white background, no human models.',
+  },
+  long_kameez: {
+    nameBn: 'লং কামিজ',
+    nameEn: 'Long Kameez',
+    descBn: 'ঐতিহ্যবাহী স্ট্রেইট লং ও মার্জিত কাট',
+    yards35: 2.0,
+    yards25: 2.5,
+    prompt:
+      'Professional fashion studio product photography of a traditional Bangladeshi Long Kameez tailored strictly from the EXACT fabric in the input image. Isolated ghost-mannequin display on light neutral background, no human models.',
+  },
+  kurti: {
+    nameBn: 'কুর্তি',
+    nameEn: 'Kurti',
+    descBn: 'স্মার্ট ক্যাজুয়াল এ-লাইন ফ্লেয়ার্ড কুর্তি',
+    yards35: 2.5,
+    yards25: 3.0,
+    prompt:
+      'Professional boutique catalog photography of a South Asian A-line Kurti tailored strictly from the EXACT fabric in the input image. Isolated ghost-mannequin display on light studio backdrop, no human models.',
+  },
+  lehenga_gown: {
+    nameBn: 'লেহেঙ্গা / গাউন',
+    nameEn: 'Lehenga / Gown',
+    descBn: 'ঘেরালো পার্টি গাউন বা ব্রাইডাল লেহেঙ্গা',
+    yards35: 3.5,
+    yards25: 4.5,
+    prompt:
+      'Luxury festive fashion product display of a flared circular Lehenga/Gown crafted strictly from the EXACT fabric in the input image. Isolated ghost-mannequin display on crisp neutral backdrop, no human models.',
+  },
+  saree: {
+    nameBn: 'শাড়ি',
+    nameEn: 'Saree',
+    descBn: '১২ হাত ফুল বডি শাড়ি ও ব্লাউজ পিস',
+    yards35: 6.0,
+    yards25: 6.0,
+    prompt:
+      'Luxury boutique display photography of a Bangladeshi Saree neatly pleated with blouse piece, crafted strictly from the EXACT fabric in the input image. Isolated studio display, no human models.',
+  },
+  long_koti: {
+    nameBn: 'লং কটি',
+    nameEn: 'Long Koti',
+    descBn: 'ওপেন-ফ্রন্ট ম্যান্ডারিন কলার ওভারলে শ্রাগ',
+    yards35: 3.5,
+    yards25: 4.5,
+    prompt:
+      'Professional fashion product photography of an ethnic Long Koti shrug tailored strictly from the EXACT fabric in the input image. Isolated ghost-mannequin display on light neutral backdrop, no human models.',
+  },
+};
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+async function resolveImageData(
+  imageRef: string
+): Promise<{ base64Data: string; mimeType: string } | null> {
+  const trimmed = String(imageRef || '').trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith('data:')) {
+    const match = trimmed.match(/^data:([^;]+);base64,(.+)$/);
+    if (match) return { mimeType: match[1], base64Data: match[2] };
+  }
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    try {
+      const resp = await fetch(trimmed);
+      if (resp.ok) {
+        const buf = new Uint8Array(await resp.arrayBuffer());
+        return {
+          mimeType: resp.headers.get('content-type') || 'image/jpeg',
+          base64Data: bytesToBase64(buf),
+        };
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  const sanitized = trimmed.replace(/\s+/g, '');
+  if (
+    sanitized.length > 100 &&
+    sanitized.length % 4 === 0 &&
+    /^[A-Za-z0-9+/=]+$/.test(sanitized)
+  ) {
+    return { mimeType: 'image/jpeg', base64Data: sanitized };
+  }
+  return null;
+}
+
+async function generateOutfitWithGeminiRest(
+  env: Bindings,
+  fabricImage: string,
+  categoryKey: string
+): Promise<string | null> {
+  const apiKey = String(env?.GEMINI_API_KEY || '').trim();
+  const cfg = AI_CATEGORY_CONFIGS[categoryKey];
+  if (!apiKey || !cfg) return null;
+
+  const resolved = await resolveImageData(fabricImage);
+  if (!resolved) return null;
+
+  try {
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  inlineData: {
+                    data: resolved.base64Data,
+                    mimeType: resolved.mimeType,
+                  },
+                },
+                { text: cfg.prompt },
+              ],
+            },
+          ],
+          generationConfig: {
+            responseModalities: ['IMAGE', 'TEXT'],
+          },
+        }),
+      }
+    );
+
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as {
+      candidates?: Array<{
+        content?: {
+          parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }>;
+        };
+      }>;
+    };
+    for (const part of json?.candidates?.[0]?.content?.parts || []) {
+      if (part.inlineData?.data) {
+        return `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+aiRouter.get('/status', (c) => {
+  return c.json({
+    success: true,
+    hasGeminiApiKey: Boolean(c.env?.GEMINI_API_KEY),
+    categories: Object.keys(AI_CATEGORY_CONFIGS),
+  });
+});
+
+aiRouter.post('/fabric-to-outfit', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    fabricImage?: string;
+    categories?: string[];
+  };
+  const fabricImage = body?.fabricImage;
+  if (!fabricImage || typeof fabricImage !== 'string') {
+    return c.json({ success: false, message: 'অনুগ্রহ করে একটি কাপড়ের ছবি প্রদান করুন।' }, 400);
+  }
+
+  const keys =
+    Array.isArray(body.categories) && body.categories.length > 0
+      ? body.categories
+      : Object.keys(AI_CATEGORY_CONFIGS);
+
+  const designs = [];
+  for (const catKey of keys) {
+    const cfg = AI_CATEGORY_CONFIGS[catKey];
+    if (!cfg) continue;
+    const generatedImage = c.env?.GEMINI_API_KEY
+      ? await generateOutfitWithGeminiRest(c.env, fabricImage, catKey)
+      : null;
+    designs.push({
+      id: `outfit-${catKey}-${Date.now()}`,
+      categoryKey: catKey,
+      categoryNameBn: cfg.nameBn,
+      categoryNameEn: cfg.nameEn,
+      descriptionBn: cfg.descBn,
+      suggestedYards35: cfg.yards35,
+      suggestedYards25: cfg.yards25,
+      imageUrl: generatedImage || fabricImage,
+      isAiGenerated: Boolean(generatedImage),
+      generatedAt: new Date().toISOString(),
+    });
+  }
+
+  return c.json({ success: true, designs });
+});
+
+aiRouter.post('/fabric-to-outfit/single', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    fabricImage?: string;
+    category?: string;
+  };
+  const cfg = body?.category ? AI_CATEGORY_CONFIGS[body.category] : undefined;
+  if (!body?.fabricImage || !body?.category || !cfg) {
+    return c.json({ success: false, message: 'কাপড়ের ছবি এবং সঠিক ক্যাটাগরি আবশ্যক।' }, 400);
+  }
+
+  const generatedImage = c.env?.GEMINI_API_KEY
+    ? await generateOutfitWithGeminiRest(c.env, body.fabricImage, body.category)
+    : null;
+
+  return c.json({
+    success: true,
+    design: {
+      id: `outfit-${body.category}-${Date.now()}`,
+      categoryKey: body.category,
+      categoryNameBn: cfg.nameBn,
+      categoryNameEn: cfg.nameEn,
+      descriptionBn: cfg.descBn,
+      suggestedYards35: cfg.yards35,
+      suggestedYards25: cfg.yards25,
+      imageUrl: generatedImage || body.fabricImage,
+      isAiGenerated: Boolean(generatedImage),
+      generatedAt: new Date().toISOString(),
+    },
+  });
+});

@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "WebWorker"],
+    "types": ["bun", "@cloudflare/workers-types", "node"],
+    "strict": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true
+  },
+  "include": [
+    "server.ts",
+    "functions/**/*.ts",
+    "backend/**/*.ts",
+    "scripts/**/*.ts",
+    "frontend/vite.config.ts",
+    "frontend/src/data/seedData.ts",
+    "frontend/src/types/index.ts"
+  ]
+}
