@@ -4,7 +4,7 @@ import type { AppEnv } from '../types';
 import { systemSettings, otpCodes } from '../../../backend/server/db/schemas/index';
 import { getSysadmEmail, signSysadmJwt, verifySysadmRequest } from '../utils/sysadmAuth';
 import { hashPassword, verifyPassword } from '../utils/auth-helper';
-import { sendTransactionalEmail } from '../utils/email';
+import { sendTransactionalEmail, getEmailProvidersStatus } from '../utils/email';
 import { invalidateHomeCache } from '../utils/cache';
 import { clearBulkMicroCache } from './bulk';
 import { authRateLimiter } from '../utils/rateLimiter';
@@ -118,7 +118,20 @@ sysadmRouter.get('/status', async (c) => {
       hasR2: Boolean(c.env?.MEDIA_BUCKET),
       hasKV: Boolean(c.env?.CACHE_KV),
     },
+    emailProviders: getEmailProvidersStatus(c.env),
   });
+});
+
+sysadmRouter.post('/test-email', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { to?: string };
+  const to = String(body?.to || getSysadmEmail(c.env)).trim();
+  const result = await sendTransactionalEmail(c.env, {
+    to,
+    subject: 'Fashion Doniya BD — Email Pipeline Test',
+    html: '<p>Multi-provider email delivery test (SendPulse -> Resend -> Amazon SES -> Apps Script).</p>',
+    text: 'Multi-provider email delivery test.',
+  });
+  return c.json({ success: result.delivered, ...result });
 });
 
 sysadmRouter.post('/cache/purge', async (c) => {
