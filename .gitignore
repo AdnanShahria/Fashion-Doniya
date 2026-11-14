@@ -1,6 +1,6 @@
 node_modules/
-build/
-dist/
+/build/
+/dist/
 frontend/dist/
 coverage/
 .DS_Store
@@ -11,4 +11,4 @@ coverage/
 !.dev.vars.example
 .wrangler/
 backend/dev.db*
-data/
+/data/
