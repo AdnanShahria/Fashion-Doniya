@@ -3,7 +3,7 @@ import { invalidateHomeCache } from './functions/api/utils/cache';
 import { clearBulkMicroCache } from './functions/api/routers/bulk';
 import type { Bindings } from './functions/api/types';
 
-const port = Number(process.env.PORT || 6901);
+const port = Number(process.env.PORT || 9998);
 
 function scheduleMidnightCacheRefresh() {
   const now = new Date();

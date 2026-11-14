@@ -237,7 +237,8 @@ export const CheckoutPage: React.FC = () => {
         outfitCategory: item.outfitCategory,
         outfitId: item.outfitId,
         outfitImage: item.outfitImage,
-        specialInstructions: item.specialInstructions || item.customizationNotes
+        specialInstructions: item.specialInstructions || item.customizationNotes,
+        selectedAddons: item.selectedAddons
       };
     });
 

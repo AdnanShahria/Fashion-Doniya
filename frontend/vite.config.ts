@@ -13,24 +13,24 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
-    port: 6900,
+    port: 9999,
     hmr: process.env.DISABLE_HMR !== 'true',
     watch: process.env.DISABLE_HMR === 'true' ? null : {},
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:6901',
+        target: 'http://127.0.0.1:9998',
         changeOrigin: true,
       },
       '/media': {
-        target: 'http://127.0.0.1:6901',
+        target: 'http://127.0.0.1:9998',
         changeOrigin: true,
       },
       '/sitemap.xml': {
-        target: 'http://127.0.0.1:6901',
+        target: 'http://127.0.0.1:9998',
         changeOrigin: true,
       },
       '/feed.xml': {
-        target: 'http://127.0.0.1:6901',
+        target: 'http://127.0.0.1:9998',
         changeOrigin: true,
       },
     },

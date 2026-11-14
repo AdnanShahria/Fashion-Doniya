@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { categoryService } from '../../services/categoryService';
+import { uploadAdminImage } from '../../services/uploadService';
 import {
   Category,
   FabricCollectionType,
@@ -329,40 +330,20 @@ export const AdminCategories: React.FC = () => {
     setIsCatModalOpen(true);
   };
 
-  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !editingCat) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const maxDim = 900;
-        let w = img.width;
-        let h = img.height;
-        if (w > maxDim || h > maxDim) {
-          if (w > h) {
-            h = Math.round((h * maxDim) / w);
-            w = maxDim;
-          } else {
-            w = Math.round((w * maxDim) / h);
-            h = maxDim;
-          }
-        }
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, w, h);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
-          setEditingCat((prev) => (prev ? { ...prev, customImageUrl: dataUrl } : null));
-          showToast('ক্যাটাগরি ছবি সফলভাবে আপলোড হয়েছে', 'success');
-        }
-      };
-      img.src = String(reader.result);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const url = await uploadAdminImage(file);
+      setEditingCat((prev) => (prev ? { ...prev, customImageUrl: url } : null));
+      showToast('ক্যাটাগরি ছবি সফলভাবে আপলোড হয়েছে', 'success');
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : 'ছবি আপলোড করতে সমস্যা হয়েছে',
+        'error'
+      );
+    }
     e.target.value = '';
   };
 

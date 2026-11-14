@@ -1,11 +1,12 @@
 import { Hono, type Context } from 'hono';
 import { eq, or } from 'drizzle-orm';
 import type { AppEnv } from '../types';
-import { orders, trackings, courierInfo, orderItems } from '../../../backend/server/db/schemas/index';
+import { orders, trackings, courierInfo, orderItems, products } from '../../../backend/server/db/schemas/index';
 import type { Order, OrderStatus, PaymentStatus } from '../../../frontend/src/types/index';
 import { getAllOrdersHydrated, hydrateOrderRow } from '../utils/mappers';
 import { appendAdminLog, buildCourierTrackingUrl, normalizePhone, safeJsonParse } from '../utils/helpers';
 import { checkoutRateLimiter, pollingRateLimiter } from '../utils/rateLimiter';
+import { invalidateHomeCache } from '../utils/cache';
 import { clearBulkMicroCache } from './bulk';
 
 export const ordersRouter = new Hono<AppEnv>();
@@ -143,11 +144,33 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
   const incoming = (await c.req.json().catch(() => ({}))) as { order?: Order } & Partial<Order>;
   const orderData = (incoming?.order || incoming) as Order;
 
-  if (!orderData || !orderData.customer?.phone || !Array.isArray(orderData.items)) {
+  if (
+    !orderData ||
+    !orderData.customer?.phone ||
+    !Array.isArray(orderData.items) ||
+    orderData.items.length === 0
+  ) {
     return c.json(
-      { success: false, message: 'অর্ডার তৈরি করতে গ্রাহকের মোবাইল নম্বর এবং পণ্যের তালিকা আবশ্যক।' },
+      { success: false, message: 'অর্ডার তৈরি করতে গ্রাহকের মোবাইল নম্বর এবং কমপক্ষে একটি পণ্য আবশ্যক।' },
       400
     );
+  }
+
+  const normalizedPhone = normalizePhone(orderData.customer.phone);
+  if (normalizedPhone.length < 10) {
+    return c.json(
+      { success: false, message: 'সঠিক ১১ সংখ্যার মোবাইল নম্বর প্রদান করুন।' },
+      400
+    );
+  }
+
+  for (const item of orderData.items) {
+    if (!item.productId || !Number.isFinite(Number(item.yards)) || Number(item.yards) <= 0) {
+      return c.json(
+        { success: false, message: 'প্রতিটি পণ্যের সঠিক পরিমাণ (গজ) প্রদান করুন।' },
+        400
+      );
+    }
   }
 
   const db = c.get('db');
@@ -157,7 +180,7 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
     orderData.orderNumber || `FD-${Math.floor(100000 + Math.random() * 900000)}`;
   const normalizedCustomer = {
     ...orderData.customer,
-    phone: normalizePhone(orderData.customer.phone),
+    phone: normalizedPhone,
     altPhone: orderData.customer.altPhone
       ? normalizePhone(orderData.customer.altPhone)
       : undefined,
@@ -173,11 +196,11 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
       userId: authUser?.id || null,
       customer: JSON.stringify(normalizedCustomer),
       items: JSON.stringify(orderData.items),
-      subtotal: Number(orderData.subtotal || 0),
-      deliveryCharge: Number(orderData.deliveryCharge || 0),
-      discountAmount: Number(orderData.discount || 0),
+      subtotal: Math.max(0, Number(orderData.subtotal || 0)),
+      deliveryCharge: Math.max(0, Number(orderData.deliveryCharge || 0)),
+      discountAmount: Math.max(0, Number(orderData.discount || 0)),
       couponCode: orderData.couponCode || null,
-      totalAmount: Number(orderData.grandTotal || 0),
+      totalAmount: Math.max(0, Number(orderData.grandTotal || 0)),
       paymentMethod: orderData.paymentMethod || 'cod',
       paymentStatus: orderData.paymentStatus || 'Pending',
       paymentDetails: orderData.paymentDetails ? JSON.stringify(orderData.paymentDetails) : null,
@@ -191,6 +214,7 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
 
   for (let idx = 0; idx < orderData.items.length; idx++) {
     const item = orderData.items[idx];
+    const yards = Math.max(0.25, Number(item.yards || 1));
     const customPayload = item.isCustomized || item.customMeasurements || item.outfitCategory || item.selectedAddons
       ? {
           isCustomized: item.isCustomized,
@@ -210,15 +234,26 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
         productId: item.productId,
         productName: item.productName || item.productId,
         sku: null,
-        yards: Number(item.yards || 1),
-        pricePerYard: Number(item.pricePerYard || 0),
-        lineTotal: Number(
-          item.finalProductPrice ?? item.subtotal ?? (item.pricePerYard || 0) * (item.yards || 1)
+        yards,
+        pricePerYard: Math.max(0, Number(item.pricePerYard || 0)),
+        lineTotal: Math.max(
+          0,
+          Number(item.finalProductPrice ?? item.subtotal ?? (item.pricePerYard || 0) * yards)
         ),
         selectedColor: item.color || null,
         customization: customPayload ? JSON.stringify(customPayload) : null,
       })
       .onConflictDoNothing();
+
+    // Deduct stock yards gracefully (clamp at 0)
+    const prod = await db.select().from(products).where(eq(products.id, item.productId)).get();
+    if (prod) {
+      const nextStock = Math.max(0, Number((prod.stockYards - yards).toFixed(2)));
+      await db
+        .update(products)
+        .set({ stockYards: nextStock, updatedAt: now })
+        .where(eq(products.id, prod.id));
+    }
   }
 
   await db
@@ -242,6 +277,7 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
     `${normalizedCustomer.fullName} · ৳${orderData.grandTotal}`,
     'Customer'
   );
+  await invalidateHomeCache(c.env);
   clearBulkMicroCache();
 
   const row = await db.select().from(orders).where(eq(orders.id, id)).get();
@@ -253,29 +289,38 @@ ordersRouter.post('/sync-client', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { orders?: Order[] };
   const db = c.get('db');
   const now = new Date().toISOString();
+  const isAdmin = c.get('isAdmin');
+  const authUser = c.get('user');
+  const clientPairs: Array<{ orderNumber: string; phone: string }> = [];
 
   if (Array.isArray(body?.orders)) {
     for (const incoming of body.orders) {
       if (!incoming?.id || !incoming?.orderNumber || !incoming?.customer?.phone) continue;
+      const cleanPhone = normalizePhone(incoming.customer.phone);
+      clientPairs.push({
+        orderNumber: incoming.orderNumber.toUpperCase(),
+        phone: cleanPhone,
+      });
       const existing = await db
         .select({ id: orders.id })
         .from(orders)
         .where(or(eq(orders.id, incoming.id), eq(orders.orderNumber, incoming.orderNumber)))
         .get();
-      if (!existing) {
+      if (!existing && Array.isArray(incoming.items) && incoming.items.length > 0) {
         await db.insert(orders).values({
           id: incoming.id,
           orderNumber: incoming.orderNumber,
+          userId: authUser?.id || null,
           customer: JSON.stringify({
             ...incoming.customer,
-            phone: normalizePhone(incoming.customer.phone),
+            phone: cleanPhone,
           }),
           items: JSON.stringify(incoming.items || []),
-          subtotal: Number(incoming.subtotal || 0),
-          deliveryCharge: Number(incoming.deliveryCharge || 0),
-          discountAmount: Number(incoming.discount || 0),
+          subtotal: Math.max(0, Number(incoming.subtotal || 0)),
+          deliveryCharge: Math.max(0, Number(incoming.deliveryCharge || 0)),
+          discountAmount: Math.max(0, Number(incoming.discount || 0)),
           couponCode: incoming.couponCode || null,
-          totalAmount: Number(incoming.grandTotal || 0),
+          totalAmount: Math.max(0, Number(incoming.grandTotal || 0)),
           paymentMethod: incoming.paymentMethod || 'cod',
           paymentStatus: incoming.paymentStatus || 'Pending',
           paymentDetails: incoming.paymentDetails ? JSON.stringify(incoming.paymentDetails) : null,
@@ -289,8 +334,31 @@ ordersRouter.post('/sync-client', async (c) => {
     }
   }
 
+  // Only admins receive the full order book; authenticated users receive their own orders;
+  // anonymous visitors receive only orders matching their locally-stored orderNumber + phone pairs.
+  if (isAdmin) {
+    const all = await getAllOrdersHydrated(db);
+    return c.json({ success: true, ...all });
+  }
+
   const all = await getAllOrdersHydrated(db);
-  return c.json({ success: true, ...all });
+  const authPhone = authUser?.phone ? normalizePhone(authUser.phone) : '';
+  const visibleOrders = all.orders.filter((ord) => {
+    const ordPhone = normalizePhone(ord.customer?.phone || '');
+    if (authUser && ((ord as unknown as { userId?: string }).userId === authUser.id || (authPhone && ordPhone === authPhone))) {
+      return true;
+    }
+    return clientPairs.some(
+      (p) => p.orderNumber === ord.orderNumber.toUpperCase() && p.phone && p.phone === ordPhone
+    );
+  });
+  const visibleIds = new Set(visibleOrders.map((o) => o.id));
+  return c.json({
+    success: true,
+    orders: visibleOrders,
+    order_tracking_history: all.order_tracking_history.filter((t) => visibleIds.has(t.orderId)),
+    courier_information: all.courier_information.filter((ci) => visibleIds.has(ci.orderId)),
+  });
 });
 
 // Admin Order Endpoints
@@ -388,7 +456,7 @@ adminOrdersRouter.patch('/:id/status', async (c) => {
 
   const now = new Date().toISOString();
   const nextPaymentStatus =
-    body.status === 'Delivered' && row.paymentMethod === 'cod' ? 'Paid' : row.paymentStatus;
+    body.status === 'Delivered' && row.paymentStatus !== 'Failed' ? 'Paid' : row.paymentStatus;
 
   await db
     .update(orders)
@@ -411,6 +479,12 @@ adminOrdersRouter.patch('/:id/status', async (c) => {
     updatedBy: body.updatedBy?.trim() || 'Admin',
   };
   await db.insert(trackings).values(entry);
+  await appendAdminLog(
+    db,
+    `অর্ডার স্ট্যাটাস আপডেট (${row.orderNumber})`,
+    'order',
+    `${row.orderStatus} → ${body.status}`
+  );
   clearBulkMicroCache();
 
   const updated = await db.select().from(orders).where(eq(orders.id, row.id)).get();
@@ -437,6 +511,8 @@ adminOrdersRouter.post('/:id/tracking', async (c) => {
 
   const status = body.status && VALID_STATUSES.includes(body.status) ? body.status : (row.orderStatus as OrderStatus);
   const now = new Date().toISOString();
+  const nextPaymentStatus =
+    status === 'Delivered' && row.paymentStatus !== 'Failed' ? 'Paid' : row.paymentStatus;
   const entry = {
     id: `trk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     orderId: row.id,
@@ -448,7 +524,11 @@ adminOrdersRouter.post('/:id/tracking', async (c) => {
     updatedBy: body.updatedBy?.trim() || 'Admin',
   };
   await db.insert(trackings).values(entry);
-  await db.update(orders).set({ orderStatus: status, updatedAt: now }).where(eq(orders.id, row.id));
+  await db
+    .update(orders)
+    .set({ orderStatus: status, paymentStatus: nextPaymentStatus, updatedAt: now })
+    .where(eq(orders.id, row.id));
+  clearBulkMicroCache();
 
   const updated = await db.select().from(orders).where(eq(orders.id, row.id)).get();
   return c.json({

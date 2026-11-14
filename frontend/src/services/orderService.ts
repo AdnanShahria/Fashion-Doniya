@@ -123,7 +123,7 @@ export const orderService = {
     );
   },
 
-  // Sync local storage with backend database
+  // Sync local storage with backend database (admin gets full order book; customer gets their own verified orders)
   async syncWithBackend(): Promise<Order[]> {
     StorageService.initialize();
     const localOrders = StorageService.getOrders();
@@ -131,6 +131,32 @@ export const orderService = {
       const response = await api.post('/orders/sync-client', { orders: localOrders });
       const data = response.data;
       if (data.success && Array.isArray(data.orders)) {
+        if (getAdminAuthToken()) {
+          StorageService.setOrders(data.orders);
+          if (Array.isArray(data.order_tracking_history)) {
+            StorageService.setOrderTrackingHistory(data.order_tracking_history);
+          }
+          if (Array.isArray(data.courier_information)) {
+            StorageService.setCourierInformation(data.courier_information);
+          }
+        } else if (data.orders.length > 0) {
+          data.orders.forEach((ord: Order) => saveServerOrderSnapshotToLocal(ord));
+        }
+        return StorageService.getOrders();
+      }
+    } catch {
+      // Fallback to local relational store if offline
+    }
+    return localOrders;
+  },
+
+  // Fetch authoritative order book for authenticated Admin portal
+  async syncAdminOrders(): Promise<Order[]> {
+    StorageService.initialize();
+    try {
+      const response = await api.get('/admin/orders');
+      const data = response.data;
+      if (data?.success && Array.isArray(data.orders)) {
         StorageService.setOrders(data.orders);
         if (Array.isArray(data.order_tracking_history)) {
           StorageService.setOrderTrackingHistory(data.order_tracking_history);
@@ -141,9 +167,9 @@ export const orderService = {
         return StorageService.getOrders();
       }
     } catch {
-      // Fallback to local relational store if offline
+      // Offline / unauthorized fallback
     }
-    return localOrders;
+    return StorageService.getOrders();
   },
 
   // Strict local verification (validates both Order ID and Phone Number)
@@ -730,6 +756,11 @@ export const orderService = {
         eventSource.onmessage = (ev) => {
           try {
             const parsed = JSON.parse(ev.data);
+            if (parsed.type === 'CONNECTED') {
+              // Edge Worker SSE closes after snapshot; close EventSource cleanly to prevent browser 3s reconnect storm
+              eventSource?.close();
+              return;
+            }
             if (parsed.type === 'ORDER_UPDATED' && parsed.order) {
               saveServerOrderSnapshotToLocal(parsed.order);
               onUpdate(parsed.order);
@@ -737,6 +768,9 @@ export const orderService = {
           } catch {
             // ignore
           }
+        };
+        eventSource.onerror = () => {
+          eventSource?.close();
         };
       }
     } catch {

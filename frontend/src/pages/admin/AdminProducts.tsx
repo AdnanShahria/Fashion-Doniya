@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { productService } from '../../services/productService';
+import { uploadAdminImage } from '../../services/uploadService';
 import {
   CUSTOM_MEASUREMENT_FIELDS,
   getDefaultProductCustomConfig,
@@ -100,22 +101,29 @@ export const AdminProducts: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    Array.from(files).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          setFormData((prev) => ({
-            ...prev,
-            images: [...(prev.images || []), reader.result as string]
-          }));
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+    const uploadedUrls: string[] = [];
+    for (const file of Array.from(files)) {
+      try {
+        const url = await uploadAdminImage(file);
+        uploadedUrls.push(url);
+      } catch (err) {
+        showToast(
+          err instanceof Error ? err.message : 'ছবি আপলোড করতে সমস্যা হয়েছে',
+          'error'
+        );
+      }
+    }
+    if (uploadedUrls.length > 0) {
+      setFormData((prev) => ({
+        ...prev,
+        images: [...(prev.images || []), ...uploadedUrls]
+      }));
+      showToast(`${uploadedUrls.length}টি ছবি সফলভাবে যোগ হয়েছে`, 'success');
+    }
     e.target.value = '';
   };
 

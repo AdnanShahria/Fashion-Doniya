@@ -88,7 +88,7 @@ export const AdminOrders: React.FC = () => {
   useEffect(() => {
     setIsSyncingBackend(true);
     orderService
-      .syncWithBackend()
+      .syncAdminOrders()
       .then((synced) => {
         setOrders(synced);
       })
@@ -781,11 +781,16 @@ export const AdminOrders: React.FC = () => {
                     })
                       .then((r) => {
                         if (r.data?.order) {
-                          orderService.syncWithBackend().then(() => reloadOrders());
+                          orderService.syncAdminOrders().then(() => reloadOrders());
                           showToast('গ্রাহকের তথ্য ও ঠিকানা আপডেট হয়েছে', 'success');
                         }
                       })
-                      .catch(() => {});
+                      .catch((err) => {
+                        showToast(
+                          err?.response?.data?.message || 'গ্রাহকের তথ্য আপডেট করা যায়নি',
+                          'error'
+                        );
+                      });
                   }}
                   className="px-3 py-1.5 bg-[#242424] hover:bg-[#C5A46D] text-white rounded-md text-[11px] font-semibold cursor-pointer"
                 >

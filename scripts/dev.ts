@@ -2,7 +2,7 @@ const apiProc = Bun.spawn(['bun', '--hot', 'server.ts'], {
   stdout: 'inherit',
   stderr: 'inherit',
   stdin: 'inherit',
-  env: { ...process.env, PORT: process.env.PORT || '6901' },
+  env: { ...process.env, PORT: process.env.PORT || '9998' },
 });
 
 const webProc = Bun.spawn(['bunx', 'vite', '--config', 'frontend/vite.config.ts', 'frontend'], {

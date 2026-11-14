@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 import { cors } from 'hono/cors';
 import { csrf } from 'hono/csrf';
 import { logger } from 'hono/logger';
@@ -332,6 +333,9 @@ app.use('/api/*', async (c, next) => {
 
 // 8. Sanitized Error Handler
 app.onError((err, c) => {
+  if (err instanceof HTTPException) {
+    return err.getResponse();
+  }
   const isDev = c.env?.NODE_ENV !== 'production';
   if (isDev) {
     console.error('[API Error]', err);

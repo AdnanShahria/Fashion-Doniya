@@ -38,28 +38,63 @@ contentRouter.post('/contact-messages', async (c) => {
   return c.json({ success: true, record }, 201);
 });
 
+function mapCustomRequestRow(r: typeof customDesignRequests.$inferSelect) {
+  const parsedFabric = safeJsonParse<Record<string, unknown>>(r.fabricDetails, {});
+  const isJsonFabric = parsedFabric && typeof parsedFabric === 'object' && Object.keys(parsedFabric).length > 0;
+  const refImgs = safeJsonParse<string[]>(r.referenceImages, []);
+  return {
+    ...r,
+    outfitType: (parsedFabric.outfitType as string) || r.outfitCategory,
+    fabricWidth: (parsedFabric.fabricWidth as string) || '3.5',
+    requiredYards: Number(parsedFabric.requiredYards ?? 2.5),
+    preferredColor: (parsedFabric.preferredColor as string) || 'পছন্দ অনুযায়ী',
+    description: (parsedFabric.description as string) || (isJsonFabric ? '' : r.fabricDetails) || r.notes || '',
+    budget: (parsedFabric.budget as string) || undefined,
+    additionalItems: Array.isArray(parsedFabric.additionalItems) ? parsedFabric.additionalItems : [],
+    referenceImages: refImgs,
+    referenceImageBase64: refImgs[0] || undefined,
+    measurements: safeJsonParse(r.measurements, {}),
+  };
+}
+
 // Public Custom Design Requests
 contentRouter.post('/custom-requests', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const customerName = String(body.customerName || '').trim();
   const phone = normalizePhone(String(body.phone || ''));
-  const outfitCategory = String(body.outfitCategory || '').trim();
-  const fabricDetails = String(body.fabricDetails || '').trim();
+  const outfitCategory = String(body.outfitCategory || body.outfitType || '').trim();
+  const rawDescription = String(body.description || body.fabricDetails || '').trim();
 
   if (!customerName || !phone || !outfitCategory) {
     return c.json({ success: false, message: 'নাম, মোবাইল নম্বর ও আউটফিট ক্যাটাগরি আবশ্যক।' }, 400);
   }
 
+  const structuredFabric = JSON.stringify({
+    outfitType: outfitCategory,
+    fabricWidth: String(body.fabricWidth || '3.5'),
+    requiredYards: Number(body.requiredYards || 2.5),
+    preferredColor: String(body.preferredColor || ''),
+    description: rawDescription,
+    budget: body.budget ? String(body.budget) : undefined,
+    additionalItems: Array.isArray(body.additionalItems) ? body.additionalItems : [],
+  });
+
+  const refs: string[] = Array.isArray(body.referenceImages)
+    ? body.referenceImages.filter((x): x is string => typeof x === 'string' && x.length > 0)
+    : typeof body.referenceImageBase64 === 'string' && body.referenceImageBase64
+      ? [body.referenceImageBase64]
+      : [];
+
   const db = c.get('db');
   const record = {
-    id: `req-${Date.now()}`,
+    id: String(body.id || `req-${Date.now()}`),
     customerName,
     phone,
     outfitCategory,
-    fabricDetails,
+    fabricDetails: structuredFabric,
     measurements: body.measurements ? JSON.stringify(body.measurements) : null,
-    referenceImages: JSON.stringify(Array.isArray(body.referenceImages) ? body.referenceImages : []),
-    notes: body.notes ? String(body.notes) : null,
+    referenceImages: JSON.stringify(refs),
+    notes: body.notes ? String(body.notes) : rawDescription || null,
     status: 'Pending',
     adminNotes: null,
     createdAt: new Date().toISOString(),
@@ -72,7 +107,7 @@ contentRouter.post('/custom-requests', async (c) => {
     `ক্যাটাগরি: ${outfitCategory} · ফোন: ${phone}`,
     'Customer'
   );
-  return c.json({ success: true, request: record }, 201);
+  return c.json({ success: true, request: mapCustomRequestRow(record) }, 201);
 });
 
 // Admin Contact Messages
@@ -122,11 +157,7 @@ adminContentRouter.get('/custom-requests', async (c) => {
     .orderBy(desc(customDesignRequests.createdAt));
   return c.json({
     success: true,
-    requests: rows.map((r) => ({
-      ...r,
-      measurements: safeJsonParse(r.measurements, undefined),
-      referenceImages: safeJsonParse(r.referenceImages, []),
-    })),
+    requests: rows.map(mapCustomRequestRow),
   });
 });
 
@@ -144,5 +175,27 @@ adminContentRouter.patch('/custom-requests/:id', async (c) => {
       ...(body.adminNotes !== undefined ? { adminNotes: body.adminNotes } : {}),
     })
     .where(eq(customDesignRequests.id, id));
-  return c.json({ success: true });
+  const updated = await db
+    .select()
+    .from(customDesignRequests)
+    .where(eq(customDesignRequests.id, id))
+    .get();
+  return c.json({
+    success: true,
+    request: updated ? mapCustomRequestRow(updated) : null,
+  });
+});
+
+adminContentRouter.delete('/custom-requests/:id', async (c) => {
+  const id = c.req.param('id');
+  const db = c.get('db');
+  await db.delete(customDesignRequests).where(eq(customDesignRequests.id, id));
+  const rows = await db
+    .select()
+    .from(customDesignRequests)
+    .orderBy(desc(customDesignRequests.createdAt));
+  return c.json({
+    success: true,
+    requests: rows.map(mapCustomRequestRow),
+  });
 });

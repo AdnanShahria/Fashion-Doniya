@@ -62,7 +62,7 @@ flowchart TD
 │   └── daily-auto-crawl.yml       # Daily 03:00 UTC GitHub Action running scripts/daily_auto_crawl.ts
 ├── frontend/                      # React SPA
 │   ├── index.html                 # Static SEO/GEO head tags & Organization/WebSite/FAQ JSON-LD
-│   ├── vite.config.ts             # Proxy (/api -> :6901) + manualChunks vendor splitting
+│   ├── vite.config.ts             # Proxy (/api -> :9998) + manualChunks vendor splitting
 │   ├── public/
 │   │   ├── _headers               # Cloudflare Pages CSP, HSTS, X-Frame-Options & asset Cache-Control
 │   │   ├── robots.txt             # Search & AI crawler directives
@@ -259,8 +259,8 @@ Update every hardcoded project/domain reference before deploying:
 1. **Local Bun Dev (`.env`) & Wrangler Local Dev (`.dev.vars`)**:
    Copy `.env.example` to `.env` and `.dev.vars.example` to `.dev.vars`:
    ```env
-   PORT=6901
-   VITE_API_URL=http://127.0.0.1:6901
+   PORT=9998
+   VITE_API_URL=http://127.0.0.1:9998
 
    # Local SQLite or Turso libSQL fallback
    TURSO_URL=file:backend/dev.db
@@ -276,8 +276,8 @@ Update every hardcoded project/domain reference before deploying:
    # Origin & Runtime
    NODE_ENV=development
    DEMO_MODE=false
-   SITE_URL=http://localhost:6900
-   ALLOWED_ORIGINS=http://localhost:6900,http://localhost:6901
+   SITE_URL=http://localhost:9999
+   ALLOWED_ORIGINS=http://localhost:9999,http://localhost:9998
 
    # Email (SendPulse primary / Google Apps Script fallback)
    SENDPULSE_CLIENT_ID=...
@@ -338,7 +338,7 @@ Choose whichever mode fits what you are testing:
   ```bash
   bun run dev
   ```
-  Runs `server.ts` on `http://127.0.0.1:6901` and Vite on `http://localhost:6900` (with `/api` proxied to `6901`). Uses `TURSO_URL` or `file:backend/dev.db` and in-memory cache fallbacks.
+  Runs `server.ts` on `http://127.0.0.1:9998` and Vite on `http://localhost:9999` (with `/api` proxied to `9998`). Uses `TURSO_URL` or `file:backend/dev.db` and in-memory cache fallbacks.
 * **Full Cloudflare Edge Emulation (`wrangler pages dev`)** — best for testing D1, R2, KV, `/product/*`, `/category/*`, `/media/*`, and `/sitemap.xml`:
   ```bash
   bun run build
@@ -373,6 +373,6 @@ Choose whichever mode fits what you are testing:
 ### Common Pitfalls to Avoid
 * **Soft 403s on Mutations in Production**: Every `POST`/`PUT`/`PATCH`/`DELETE` goes through `isAllowedStorefrontOrigin` in `functions/api/app.ts`. If your custom domain is missing from `SITE_URL`, `ALLOWED_ORIGINS`, or `isAllowedStorefrontOrigin`, API writes will be blocked with `403`.
 * **CSP Blocking Images or Fonts**: `frontend/public/_headers` enforces a strict `Content-Security-Policy`. If you add external image CDNs, analytics, or subdomains, add them to `img-src` / `connect-src` in `_headers`.
-* **`VITE_API_URL` Baked into Production**: Never leave `VITE_API_URL=http://127.0.0.1:6901` in your Cloudflare Pages build environment—otherwise production visitors will try to call `localhost`.
+* **`VITE_API_URL` Baked into Production**: Never leave `VITE_API_URL=http://127.0.0.1:9998` in your Cloudflare Pages build environment—otherwise production visitors will try to call `localhost`.
 * **Production `JWT_SECRET` Length**: `functions/api/routers/auth.ts` throws an error in `NODE_ENV=production` if `JWT_SECRET` is missing or shorter than 32 characters.
 * **Demo Mode Left Enabled**: Check both the `DEMO_MODE` env var and the `demo.mode` row in `system_settings`—if either is `"true"`, all customer checkout and admin mutations are blocked with `403`.

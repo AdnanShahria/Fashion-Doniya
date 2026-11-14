@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun run scripts/dev.ts",
+    "dev:full": "bun run scripts/dev.ts",
     "dev:api": "bun --hot server.ts",
     "dev:web": "bunx vite --config frontend/vite.config.ts frontend",
     "build": "bunx vite build --config frontend/vite.config.ts frontend",

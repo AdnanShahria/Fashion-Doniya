@@ -17,6 +17,7 @@ import { settingsService } from '../services/settingsService';
 import { orderService } from '../services/orderService';
 import { categoryService } from '../services/categoryService';
 import { measurementService } from '../services/measurementService';
+import { api } from '../services/api';
 import { useHomeStore } from '../store/homeStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useCartStore } from '../store/cartStore';
@@ -193,6 +194,11 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       es.onmessage = (evt) => {
         try {
           const payload = JSON.parse(evt.data);
+          if (payload?.type === 'CONNECTED') {
+            // Edge Worker stream closes after snapshot; close cleanly to avoid 3s reconnect storm
+            es?.close();
+            return;
+          }
           if (payload?.type === 'SITE_STATE_UPDATED') {
             if (Array.isArray(payload.products)) {
               StorageService.setProducts(payload.products);
@@ -211,6 +217,9 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         } catch {
           // ignore parse error
         }
+      };
+      es.onerror = () => {
+        es?.close();
       };
     } catch {
       // ignore SSE error
@@ -621,7 +630,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           outfitCategory: customization?.outfitCategory,
           outfitId: customization?.outfitId,
           outfitImage: customization?.outfitImage,
-          specialInstructions: customization?.specialInstructions || customization?.customizationNotes
+          specialInstructions: customization?.specialInstructions || customization?.customizationNotes,
+          selectedAddons: customization?.selectedAddons
         }
       ];
     });
@@ -716,7 +726,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       outfitCategory: customization?.outfitCategory,
       outfitId: customization?.outfitId,
       outfitImage: customization?.outfitImage,
-      specialInstructions: customization?.specialInstructions || customization?.customizationNotes
+      specialInstructions: customization?.specialInstructions || customization?.customizationNotes,
+      selectedAddons: customization?.selectedAddons
     };
 
     setBuyNowItem(buyItem);
@@ -749,8 +760,21 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const loginUser = (phone: string, password: string): boolean => {
     const res = StorageService.authenticateUser(phone, password);
+    api
+      .post('/auth/login', { phone, password })
+      .then((r) => {
+        if (r.data?.success && r.data.user) {
+          useAuthStore.getState().setAuth(r.data.user, r.data.token);
+          setCurrentUser(r.data.user);
+          if (!res.success) {
+            showToast(r.data.message || `স্বাগতম, ${r.data.user.fullName}!`, 'success');
+          }
+        }
+      })
+      .catch(() => {});
     if (res.success && res.user) {
       setCurrentUser(res.user);
+      useAuthStore.getState().setAuth(res.user);
       showToast(res.message, 'success');
       return true;
     }
@@ -760,8 +784,18 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const registerUser = (fullName: string, phone: string, password: string): boolean => {
     const res = StorageService.registerUser(fullName, phone, password);
+    api
+      .post('/auth/register', { fullName, phone, password })
+      .then((r) => {
+        if (r.data?.success && r.data.user) {
+          useAuthStore.getState().setAuth(r.data.user, r.data.token);
+          setCurrentUser(r.data.user);
+        }
+      })
+      .catch(() => {});
     if (res.success && res.user) {
       setCurrentUser(res.user);
+      useAuthStore.getState().setAuth(res.user);
       showToast(res.message, 'success');
       return true;
     }
@@ -771,6 +805,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const resetPassword = (phone: string, newPassword: string): boolean => {
     const res = StorageService.resetUserPassword(phone, newPassword);
+    api.post('/auth/forgot-password', { phone, newPassword }).catch(() => {});
     if (res.success) {
       showToast(res.message, 'success');
       return true;
@@ -781,6 +816,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const logoutUser = () => {
     setCurrentUser(null);
+    useAuthStore.getState().logout();
     showToast('লগআউট সম্পন্ন হয়েছে', 'info');
   };
 

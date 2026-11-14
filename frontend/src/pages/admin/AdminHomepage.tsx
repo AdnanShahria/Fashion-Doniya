@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { settingsService } from '../../services/settingsService';
 import { productService } from '../../services/productService';
+import { uploadAdminImage } from '../../services/uploadService';
 import {
   HomepageConfig,
   HeroSlideConfig,
@@ -68,17 +69,16 @@ export const AdminHomepage: React.FC = () => {
     });
   };
 
-  const handleSlideImageUpload = (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSlideImageUpload = async (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        updateSlide(idx, { image: reader.result });
-        showToast('হিরো স্লাইডের ছবি আপলোড হয়েছে', 'info');
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const url = await uploadAdminImage(file);
+      updateSlide(idx, { image: url });
+      showToast('হিরো স্লাইডের ছবি আপলোড হয়েছে', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'ছবি আপলোড ব্যর্থ হয়েছে', 'error');
+    }
     e.target.value = '';
   };
 
@@ -149,17 +149,16 @@ export const AdminHomepage: React.FC = () => {
     });
   };
 
-  const handleFabricCardImageUpload = (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFabricCardImageUpload = async (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        updateFabricWidthCard(idx, { fabricImage: reader.result });
-        showToast('বহর কার্ডের ছবি সফলভাবে আপলোড হয়েছে', 'info');
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const url = await uploadAdminImage(file);
+      updateFabricWidthCard(idx, { fabricImage: url });
+      showToast('বহর কার্ডের ছবি সফলভাবে আপলোড হয়েছে', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'ছবি আপলোড ব্যর্থ হয়েছে', 'error');
+    }
     e.target.value = '';
   };
 

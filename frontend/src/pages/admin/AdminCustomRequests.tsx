@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { customDesignService } from '../../services/customDesignService';
 import { CustomDesignRequest } from '../../types';
@@ -10,18 +10,33 @@ import {
   Image as ImageIcon, 
   Clock, 
   Phone,
-  MessageCircle
+  MessageCircle,
+  RefreshCw,
+  Save
 } from 'lucide-react';
 
 export const AdminCustomRequests: React.FC = () => {
-  const { showToast, settings } = useStore();
+  const { showToast } = useStore();
   const [requests, setRequests] = useState<CustomDesignRequest[]>(() => customDesignService.getAllRequests());
   const [selectedReq, setSelectedReq] = useState<CustomDesignRequest | null>(null);
   const [adminNoteInput, setAdminNoteInput] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const reload = () => {
     setRequests(customDesignService.getAllRequests());
   };
+
+  const syncFromServer = () => {
+    setIsSyncing(true);
+    customDesignService
+      .syncFromBackend()
+      .then((synced) => setRequests(synced))
+      .finally(() => setIsSyncing(false));
+  };
+
+  useEffect(() => {
+    syncFromServer();
+  }, []);
 
   const handleUpdateStatus = (id: string, status: CustomDesignRequest['status']) => {
     customDesignService.updateRequestStatus(id, status, adminNoteInput.trim() || undefined);
@@ -43,9 +58,19 @@ export const AdminCustomRequests: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-[#242424]">কাস্টম ডিজাইন অনুরোধ (Custom Design Requests)</h2>
-        <p className="text-xs text-[#242424]/60">গ্রাহকদের প্রেরিত নিজস্ব ডিজাইন, রেফারেন্স ছবি ও স্পেশাল মাপসমূহ পর্যালোচনা করুন।</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-[#242424]">কাস্টম ডিজাইন অনুরোধ (Custom Design Requests)</h2>
+          <p className="text-xs text-[#242424]/60">গ্রাহকদের প্রেরিত নিজস্ব ডিজাইন, রেফারেন্স ছবি ও স্পেশাল মাপসমূহ পর্যালোচনা করুন।</p>
+        </div>
+        <button
+          onClick={syncFromServer}
+          disabled={isSyncing}
+          className="px-3 py-1.5 rounded-lg bg-white border border-[#EDE5D9] text-xs font-semibold text-[#242424] hover:border-[#C5A46D] flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+          <span>{isSyncing ? 'সিঙ্ক হচ্ছে...' : 'রিফ্রেশ'}</span>
+        </button>
       </div>
 
       <div className="bg-white rounded-xl border border-[#EDE5D9] overflow-hidden shadow-xs">
@@ -238,6 +263,14 @@ export const AdminCustomRequests: React.FC = () => {
                   <option value="Completed">Completed</option>
                   <option value="Rejected">Rejected</option>
                 </select>
+                <button
+                  type="button"
+                  onClick={() => handleUpdateStatus(selectedReq.id, selectedReq.status)}
+                  className="px-2.5 py-1 bg-[#FAF8F4] hover:bg-[#EDE5D9] border border-[#EDE5D9] rounded-md text-xs font-semibold text-[#242424] flex items-center gap-1 cursor-pointer"
+                >
+                  <Save className="w-3 h-3" />
+                  <span>নোট সেভ</span>
+                </button>
               </div>
 
               <div className="flex items-center gap-2">

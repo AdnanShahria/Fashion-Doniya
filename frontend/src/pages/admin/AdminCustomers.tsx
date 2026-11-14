@@ -131,13 +131,22 @@ export const AdminCustomers: React.FC = () => {
       return;
     }
 
-    api.put(`/admin/customers/${encodeURIComponent(formData.id || `cust-${Date.now()}`)}`, formData)
+    const isNew = !formData.id || formData.id.startsWith('cust-');
+    const reqPromise =
+      formData.id && !formData.id.startsWith('cust-order-') && !isNew
+        ? api.put(`/admin/customers/${encodeURIComponent(formData.id)}`, formData)
+        : api.put(`/admin/customers/${encodeURIComponent(formData.id || `cust-${Date.now()}`)}`, formData);
+
+    reqPromise
       .then(() => {
         loadCustomers();
         setIsEditModalOpen(false);
         showToast('গ্রাহকের তথ্য সফলভাবে সংরক্ষিত হয়েছে!', 'success');
       })
-      .catch(() => {});
+      .catch((err) => {
+        const msg = err?.response?.data?.message || 'গ্রাহকের তথ্য সংরক্ষণ করা যায়নি';
+        showToast(msg, 'error');
+      });
   };
 
   const handleDeleteCustomer = (cust: CustomerUser) => {
@@ -147,7 +156,10 @@ export const AdminCustomers: React.FC = () => {
         loadCustomers();
         showToast('গ্রাহকের প্রোফাইল মুছে ফেলা হয়েছে', 'info');
       })
-      .catch(() => {});
+      .catch((err) => {
+        const msg = err?.response?.data?.message || 'গ্রাহকের প্রোফাইল মুছে ফেলা যায়নি';
+        showToast(msg, 'error');
+      });
   };
 
   const filteredCustomers = mergedCustomers.filter((c) => {

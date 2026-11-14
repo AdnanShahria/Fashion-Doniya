@@ -17,6 +17,7 @@ import {
   popupSettings,
 } from '../../../backend/server/db/schemas/index';
 import { safeJsonParse } from '../utils/helpers';
+import { getStoreAndPaymentSettings } from '../utils/mappers';
 
 export const addressesRouter = new Hono<AppEnv>();
 export const walletRouter = new Hono<AppEnv>();
@@ -184,23 +185,46 @@ couponsRouter.post('/validate', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { code?: string; subtotal?: number };
   const code = String(body.code || '').trim().toUpperCase();
   const subtotal = Number(body.subtotal || 0);
+  if (!code) {
+    return c.json({ isValid: false, discountAmount: 0, message: 'অনুগ্রহ করে কুপন কোড লিখুন।' });
+  }
   const db = c.get('db');
   const found = await db.select().from(coupons).where(eq(coupons.code, code)).get();
-  if (!found || !found.isActive) {
+  if (found && found.isActive) {
+    if (found.minOrderAmount && subtotal < found.minOrderAmount) {
+      return c.json({
+        isValid: false,
+        discountAmount: 0,
+        message: `এই কুপন ব্যবহারের জন্য ন্যূনতম ৳${found.minOrderAmount} অর্ডার করতে হবে।`,
+      });
+    }
+    const discountAmount =
+      found.discountType === 'percentage'
+        ? Math.round((subtotal * found.discountValue) / 100)
+        : Math.min(subtotal, found.discountValue);
+    return c.json({ isValid: true, discountAmount, coupon: found, message: 'কুপন সফলভাবে প্রয়োগ হয়েছে!' });
+  }
+
+  // Fallback to systemSettings store_settings.coupons managed by AdminPromotions / AdminSettings
+  const { settings } = await getStoreAndPaymentSettings(db);
+  const cfgCoupon = (settings.coupons || []).find(
+    (cp) => cp.code?.trim().toUpperCase() === code && cp.isActive
+  );
+  if (!cfgCoupon) {
     return c.json({ isValid: false, discountAmount: 0, message: 'কুপন কোডটি সঠিক নয় বা মেয়াদ শেষ হয়েছে।' });
   }
-  if (found.minOrderAmount && subtotal < found.minOrderAmount) {
+  if (cfgCoupon.minOrderAmount && subtotal < cfgCoupon.minOrderAmount) {
     return c.json({
       isValid: false,
       discountAmount: 0,
-      message: `এই কুপন ব্যবহারের জন্য ন্যূনতম ৳${found.minOrderAmount} অর্ডার করতে হবে।`,
+      message: `এই কুপন ব্যবহারের জন্য ন্যূনতম ৳${cfgCoupon.minOrderAmount} অর্ডার করতে হবে।`,
     });
   }
   const discountAmount =
-    found.discountType === 'percentage'
-      ? Math.round((subtotal * found.discountValue) / 100)
-      : Math.min(subtotal, found.discountValue);
-  return c.json({ isValid: true, discountAmount, coupon: found, message: 'কুপন সফলভাবে প্রয়োগ হয়েছে!' });
+    cfgCoupon.discountType === 'percentage'
+      ? Math.round((subtotal * cfgCoupon.discountValue) / 100)
+      : Math.min(subtotal, cfgCoupon.discountValue);
+  return c.json({ isValid: true, discountAmount, coupon: cfgCoupon, message: 'কুপন সফলভাবে প্রয়োগ হয়েছে!' });
 });
 
 // Cart
