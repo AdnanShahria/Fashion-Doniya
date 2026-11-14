@@ -1,0 +1,6 @@
+{
+  "name": "Fashion Doniya BD — গজ হিসেবে প্রিমিয়াম ফ্যাব্রিক স্টোর",
+  "description": "আপনার পছন্দের কাপড়, এখন গজ হিসেবে। কামিজ, গাউন, শাড়ি ও কাস্টম ডিজাইনের জন্য প্রিমিয়াম ২.৫ ও ৩.৫ বহর ফ্যাব্রিক সংগ্রহ ও স্বয়ংক্রিয় গজ ক্যালকুলেটর।",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
