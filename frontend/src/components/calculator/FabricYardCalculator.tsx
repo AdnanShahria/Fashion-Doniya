@@ -2,22 +2,13 @@ import React, { useState, useMemo } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { FabricWidth } from '../../types';
 import { measurementService } from '../../services/measurementService';
-import {
-  Plus,
-  Minus,
-  Check
-} from 'lucide-react';
+import { toBengaliNumber } from '../../utils/fabricHelpers';
+import { Plus, Minus, Check, Ruler } from 'lucide-react';
 
 interface FabricYardCalculatorProps {
   initialWidth?: FabricWidth;
   preSelectedProductId?: string;
   isEmbedded?: boolean;
-}
-
-const BENGALI_DIGITS = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
-
-function toBengaliNumber(value: number | string): string {
-  return String(value).replace(/\d/g, (d) => BENGALI_DIGITS[Number(d)]);
 }
 
 export const FabricYardCalculator: React.FC<FabricYardCalculatorProps> = ({
@@ -33,33 +24,26 @@ export const FabricYardCalculator: React.FC<FabricYardCalculatorProps> = ({
   const [additionalSelections, setAdditionalSelections] = useState<{ [id: string]: number }>({});
   const [selectedProductId, setSelectedProductId] = useState<string>(preSelectedProductId || '');
 
-  // Custom measurement inputs
-  const [heightFit, setHeightFit] = useState<'standard' | 'tall' | 'petite'>('standard');
-  const [bodyLengthInches, setBodyLengthInches] = useState<string>('44');
-  const [chestSizeInches, setChestSizeInches] = useState<string>('38');
+  const [heightFit] = useState<'standard' | 'tall' | 'petite'>('standard');
+  const [bodyLengthInches] = useState<string>('44');
 
-  // Load rules and additions for current width
   const rules = useMemo(() => measurementService.getRulesByWidth(fabricWidth), [fabricWidth]);
   const additionalItems = useMemo(() => measurementService.getAdditionalItemsByWidth(fabricWidth), [fabricWidth]);
 
-  // Set default selected rule when width changes
   React.useEffect(() => {
     if (rules.length > 0 && (!selectedOutfitRuleId || !rules.some(r => r.id === selectedOutfitRuleId))) {
       setSelectedOutfitRuleId(rules[0].id);
     }
   }, [rules, selectedOutfitRuleId]);
 
-  // Available fabrics matching the width
   const matchingFabrics = useMemo(() => {
     return products.filter(p => p.fabricWidth === fabricWidth && p.isActive);
   }, [products, fabricWidth]);
 
-  // Active chosen product
   const chosenProduct = useMemo(() => {
     return products.find(p => p.id === selectedProductId) || matchingFabrics[0];
   }, [products, selectedProductId, matchingFabrics]);
 
-  // Calculate adjustment for tall height or extra body length
   const customAdjustment = useMemo(() => {
     let adj = 0;
     if (heightFit === 'tall') adj += 0.25;
@@ -68,7 +52,6 @@ export const FabricYardCalculator: React.FC<FabricYardCalculatorProps> = ({
     return adj;
   }, [heightFit, bodyLengthInches]);
 
-  // Calculation result
   const calculation = useMemo(() => {
     return measurementService.calculateRequiredYards({
       fabricWidth,
@@ -92,7 +75,7 @@ export const FabricYardCalculator: React.FC<FabricYardCalculatorProps> = ({
 
   const handleAddToCartCalculated = () => {
     if (!chosenProduct) {
-      showToast('অনুগ্রহ করে একটি কাপড় নির্বাচন করুন', 'info');
+      showToast('অনুগ্রহ করে একটি কাপড় নির্বাচন করুন', 'info');
       return;
     }
     addToCart(chosenProduct, calculation.totalYards);
@@ -100,7 +83,7 @@ export const FabricYardCalculator: React.FC<FabricYardCalculatorProps> = ({
 
   const handleBuyNowCalculated = () => {
     if (!chosenProduct) {
-      showToast('অনুগ্রহ করে একটি কাপড় নির্বাচন করুন', 'info');
+      showToast('অনুগ্রহ করে একটি কাপড় নির্বাচন করুন', 'info');
       return;
     }
     buyNow(chosenProduct, calculation.totalYards);
@@ -108,95 +91,111 @@ export const FabricYardCalculator: React.FC<FabricYardCalculatorProps> = ({
 
   return (
     <div
-      className={`w-full max-w-full min-w-0 box-border bg-white rounded-xl sm:rounded-2xl border border-[#EDE5D9] shadow-xs overflow-hidden ${
-        isEmbedded ? 'p-3 sm:p-6' : 'p-3 sm:p-6 lg:p-8'
+      className={`w-full max-w-full min-w-0 box-border ${
+        isEmbedded
+          ? 'bg-transparent'
+          : 'bg-[#FFFDF9] rounded-2xl border border-[#E5D4BE] shadow-[0_12px_36px_-14px_rgba(107,8,18,0.10)] p-4 sm:p-6 lg:p-8'
       }`}
     >
-      {/* Title Header + Width Switcher */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between pb-3.5 sm:pb-6 border-b border-[#EDE5D9] gap-3 sm:gap-4 min-w-0">
+      {/* Title Header + Width Segmented Switcher */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 sm:pb-6 border-b border-[#EDE0CE] gap-3 sm:gap-4 min-w-0">
         <div className="min-w-0 space-y-1">
-          <div className="text-[#B87D14] font-bold text-[10px] sm:text-xs uppercase tracking-wider">
+          <div className="inline-flex items-center gap-1.5 text-[#8A5A10] font-extrabold text-[11px] sm:text-xs uppercase tracking-[0.12em]">
+            <Ruler className="w-3.5 h-3.5" />
             <span>স্মার্ট গজ পরিমাপক</span>
           </div>
-          <h2 className="text-[clamp(1.05rem,4.2vw,1.5rem)] font-bold text-[#610710] leading-snug break-words">
+          <h3 className="text-[clamp(1.05rem,4.2vw,1.45rem)] font-extrabold text-[#6B0812] leading-snug break-words">
             কাপড়ের স্বয়ংক্রিয় গজ ক্যালকুলেটর
-          </h2>
-          <p className="text-[clamp(0.75rem,2.8vw,0.875rem)] text-[#4E3631]/80 leading-relaxed break-words">
-            আপনার পোশাকের ধরন ও বহর নির্বাচন করুন, প্রয়োজনীয় নিখুঁত গজের হিসাব পেয়ে যান নিমেষেই।
+          </h3>
+          <p className="text-xs sm:text-sm text-[#523A35] leading-relaxed break-words">
+            আপনার পোশাকের ধরন ও বহর নির্বাচন করুন, প্রয়োজনীয় নিখুঁত গজের হিসাব পেয়ে যান নিমেষেই।
           </p>
         </div>
 
-        {/* Width Switcher (৩.৫ বহর vs ২.৫ বহর) - Full width 2-col on mobile, inline on desktop */}
-        <div className="w-full md:w-auto grid grid-cols-2 md:inline-flex items-center p-1 bg-[#FAF6F0] border border-[#E5D4BE] rounded-xl shrink-0 box-border">
+        {/* Width Segmented Switcher */}
+        <div
+          role="tablist"
+          aria-label="কাপড়ের বহর নির্বাচন"
+          className="w-full md:w-auto grid grid-cols-2 md:inline-flex items-center gap-1 p-1.5 bg-[#FAF6F0] border border-[#E2D0B8] rounded-2xl shrink-0 box-border"
+        >
           <button
             type="button"
+            role="tab"
+            aria-selected={fabricWidth === '3.5'}
             onClick={() => {
               setFabricWidth('3.5');
               setAdditionalSelections({});
             }}
-            className={`min-h-[38px] px-2.5 sm:px-4 py-1.5 text-[clamp(0.72rem,2.8vw,0.8125rem)] font-bold rounded-lg transition-all cursor-pointer text-center leading-tight ${
+            className={`min-h-[42px] px-3 sm:px-4 py-1.5 rounded-xl transition-all cursor-pointer text-center leading-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] ${
               fabricWidth === '3.5'
-                ? 'bg-[#6B0812] text-white shadow-xs'
-                : 'text-[#4E3631] hover:text-[#6B0812]'
+                ? 'bg-[#6B0812] text-white shadow-[0_4px_12px_rgba(107,8,18,0.22)]'
+                : 'text-[#523A35] hover:text-[#6B0812] hover:bg-[#FFFDF9]/80'
             }`}
           >
-            ৩.৫ বহর (বড় বহর)
+            <span className="block text-xs sm:text-[13px] font-bold">৩.৫ বহর (বড় বহর)</span>
+            <span className={`block text-[10.5px] font-medium mt-0.5 ${fabricWidth === '3.5' ? 'text-[#FAF5EC]/85' : 'text-[#6E5750]'}`}>
+              ৫৬–৬০ ইঞ্চি প্রস্থ
+            </span>
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={fabricWidth === '2.5'}
             onClick={() => {
               setFabricWidth('2.5');
               setAdditionalSelections({});
             }}
-            className={`min-h-[38px] px-2.5 sm:px-4 py-1.5 text-[clamp(0.72rem,2.8vw,0.8125rem)] font-bold rounded-lg transition-all cursor-pointer text-center leading-tight ${
+            className={`min-h-[42px] px-3 sm:px-4 py-1.5 rounded-xl transition-all cursor-pointer text-center leading-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] ${
               fabricWidth === '2.5'
-                ? 'bg-[#6B0812] text-white shadow-xs'
-                : 'text-[#4E3631] hover:text-[#6B0812]'
+                ? 'bg-[#6B0812] text-white shadow-[0_4px_12px_rgba(107,8,18,0.22)]'
+                : 'text-[#523A35] hover:text-[#6B0812] hover:bg-[#FFFDF9]/80'
             }`}
           >
-            ২.৫ বহর (সাধারণ বহর)
+            <span className="block text-xs sm:text-[13px] font-bold">২.৫ বহর (সাধারণ বহর)</span>
+            <span className={`block text-[10.5px] font-medium mt-0.5 ${fabricWidth === '2.5' ? 'text-[#FAF5EC]/85' : 'text-[#6E5750]'}`}>
+              ৪২–৪৪ ইঞ্চি প্রস্থ
+            </span>
           </button>
         </div>
       </div>
 
-      {/* Main Layout: Single-Column Stacked on Mobile, 12-Column Split on Desktop */}
+      {/* Main Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-7 lg:gap-8 pt-4 sm:pt-6 min-w-0">
-        {/* Left/Top Column: Garment Selection & Measurement Form (Col 7 on Desktop) */}
+        {/* Left Column: Garment Selection & Measurement Form */}
         <div className="lg:col-span-7 space-y-5 sm:space-y-6 min-w-0">
           {/* Step 1: Select Main Outfit */}
           <div className="min-w-0 space-y-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <label className="block text-[clamp(0.78rem,3vw,0.875rem)] font-bold text-[#2B1615]">
+              <label className="block text-xs sm:text-sm font-bold text-[#241614]">
                 ১. মূল পোশাকের ধরন নির্বাচন করুন:
               </label>
 
               {/* Touch-friendly Outfit Quantity Stepper */}
-              <div className="inline-flex items-center gap-1.5 bg-[#FAF6F0] border border-[#E5D4BE] rounded-lg px-2 py-1">
-                <span className="text-[11px] font-semibold text-[#4E3631]">সংখ্যা:</span>
+              <div className="inline-flex items-center gap-2 bg-[#FAF6F0] border border-[#DFCBB2] rounded-xl px-2.5 py-1">
+                <span className="text-xs font-semibold text-[#523A35]">সংখ্যা:</span>
                 <button
                   type="button"
                   onClick={() => setOutfitCount(prev => Math.max(1, prev - 1))}
                   disabled={outfitCount <= 1}
-                  className="w-6 h-6 rounded-md bg-white border border-[#DFC9AA] flex items-center justify-center text-[#6B0812] disabled:opacity-40 cursor-pointer"
+                  className="w-8 h-8 rounded-lg bg-[#FFFDF9] border border-[#DFC9AA] hover:border-[#8A5A10] flex items-center justify-center text-[#6B0812] disabled:opacity-40 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
                   aria-label="পোশাকের সংখ্যা কমান"
                 >
-                  <Minus className="w-3 h-3" />
+                  <Minus className="w-3.5 h-3.5" />
                 </button>
-                <span className="min-w-[22px] text-center text-xs font-bold text-[#6B0812] tabular-nums">
+                <span className="min-w-[26px] text-center text-xs sm:text-sm font-bold text-[#6B0812] tabular-nums">
                   {toBengaliNumber(outfitCount)}টি
                 </span>
                 <button
                   type="button"
                   onClick={() => setOutfitCount(prev => Math.min(10, prev + 1))}
-                  className="w-6 h-6 rounded-md bg-white border border-[#DFC9AA] flex items-center justify-center text-[#6B0812] cursor-pointer"
-                  aria-label="পোশাকের সংখ্যা বাড়ান"
+                  className="w-8 h-8 rounded-lg bg-[#FFFDF9] border border-[#DFC9AA] hover:border-[#8A5A10] flex items-center justify-center text-[#6B0812] cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
+                  aria-label="পোশাকের সংখ্যা বাড়ান"
                 >
-                  <Plus className="w-3 h-3" />
+                  <Plus className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
 
-            {/* Responsive Garment Cards Grid: 1 col at <340px, 2 cols on mobile, 3 cols on sm+ */}
             <div className="grid grid-cols-1 min-[340px]:grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5 min-w-0">
               {rules.map((rule) => {
                 const isSelected = selectedOutfitRuleId === rule.id;
@@ -205,14 +204,14 @@ export const FabricYardCalculator: React.FC<FabricYardCalculatorProps> = ({
                     key={rule.id}
                     type="button"
                     onClick={() => setSelectedOutfitRuleId(rule.id)}
-                    className={`w-full min-w-0 box-border p-2.5 sm:p-3 text-left rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+                    className={`w-full min-w-0 min-h-[60px] box-border p-3 text-left rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] ${
                       isSelected
-                        ? 'border-[#6B0812] bg-[#FAF3E8] ring-1 ring-[#6B0812]/30 shadow-2xs'
-                        : 'border-[#E6D7C3] bg-white hover:border-[#C5A46D]'
+                        ? 'border-[#6B0812] bg-[#FAF3E8] ring-1 ring-[#6B0812]/25 shadow-[0_4px_12px_-6px_rgba(107,8,18,0.20)]'
+                        : 'border-[#E6D7C3] bg-[#FFFDF9] hover:border-[#C59B48]'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-1.5 min-w-0">
-                      <span className="text-[clamp(0.78rem,2.9vw,0.85rem)] font-bold text-[#2B1615] leading-snug break-words">
+                      <span className="text-xs sm:text-[13.5px] font-bold text-[#241614] leading-snug break-words">
                         {rule.name}
                       </span>
                       {isSelected && (
@@ -221,7 +220,7 @@ export const FabricYardCalculator: React.FC<FabricYardCalculatorProps> = ({
                         </span>
                       )}
                     </div>
-                    <span className="text-[11px] font-semibold text-[#8A5A14] block tabular-nums">
+                    <span className="text-[11px] font-bold text-[#8A5A10] block tabular-nums">
                       ভিত্তি: {toBengaliNumber(rule.baseYards)} গজ
                     </span>
                   </button>
@@ -233,15 +232,14 @@ export const FabricYardCalculator: React.FC<FabricYardCalculatorProps> = ({
           {/* Step 2: Additional Clothing Items */}
           <div className="min-w-0 space-y-2.5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-0.5 sm:gap-2">
-              <label className="text-[clamp(0.78rem,3vw,0.875rem)] font-bold text-[#2B1615]">
+              <label className="text-xs sm:text-sm font-bold text-[#241614]">
                 ২. অতিরিক্ত পোশাকের অংশ যোগ করুন (ঐচ্ছিক):
               </label>
-              <span className="text-[11px] text-[#5C433E]/80">
-                প্যান্ট, ওড়না, ইনার ইত্যাদি
+              <span className="text-xs text-[#523A35]">
+                প্যান্ট, ওড়না, ইনার ইত্যাদি
               </span>
             </div>
 
-            {/* Single-column on mobile so Bengali labels and touch steppers never cramp */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 min-w-0">
               {additionalItems.map((item) => {
                 const count = additionalSelections[item.id] || 0;
@@ -251,35 +249,35 @@ export const FabricYardCalculator: React.FC<FabricYardCalculatorProps> = ({
                     className={`w-full min-w-0 box-border p-2.5 sm:p-3 rounded-xl border flex items-center justify-between gap-2 transition-all ${
                       count > 0
                         ? 'border-[#6B0812] bg-[#FAF3E8]'
-                        : 'border-[#E6D7C3] bg-white'
+                        : 'border-[#E6D7C3] bg-[#FFFDF9]'
                     }`}
                   >
                     <div className="min-w-0 flex-1">
-                      <h4 className="text-[clamp(0.78rem,2.9vw,0.85rem)] font-bold text-[#2B1615] leading-snug break-words">
+                      <h4 className="text-xs sm:text-[13.5px] font-bold text-[#241614] leading-snug break-words">
                         {item.name}
                       </h4>
-                      <p className="text-[11px] font-medium text-[#5C433E] tabular-nums mt-0.5">
+                      <p className="text-[11px] font-medium text-[#523A35] tabular-nums mt-0.5">
                         প্রতিটি {toBengaliNumber(item.yardsPerUnit)} গজ
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-1.5 border border-[#DFC9AA] bg-[#FFFDF9] rounded-lg p-1 shrink-0">
+                    <div className="flex items-center gap-1.5 border border-[#DFC9AA] bg-[#FFFDF9] rounded-xl p-1 shrink-0">
                       <button
                         type="button"
                         onClick={() => handleAdditionalItemToggle(item.id, false)}
                         disabled={count === 0}
-                        className="w-7 h-7 sm:w-7 sm:h-7 flex items-center justify-center text-[#6B0812] hover:bg-[#FAF3E8] disabled:opacity-35 rounded-md cursor-pointer transition-colors"
+                        className="w-8 h-8 flex items-center justify-center text-[#6B0812] hover:bg-[#FAF3E8] disabled:opacity-35 rounded-lg cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
                         aria-label={`${item.name} কমান`}
                       >
                         <Minus className="w-3.5 h-3.5" />
                       </button>
-                      <span className="min-w-[22px] text-center text-xs sm:text-sm font-bold tabular-nums text-[#6B0812]">
+                      <span className="min-w-[24px] text-center text-xs sm:text-sm font-bold tabular-nums text-[#6B0812]">
                         {toBengaliNumber(count)}
                       </span>
                       <button
                         type="button"
                         onClick={() => handleAdditionalItemToggle(item.id, true)}
-                        className="w-7 h-7 sm:w-7 sm:h-7 flex items-center justify-center text-[#6B0812] hover:bg-[#FAF3E8] rounded-md cursor-pointer transition-colors"
+                        className="w-8 h-8 flex items-center justify-center text-[#6B0812] hover:bg-[#FAF3E8] rounded-lg cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
                         aria-label={`${item.name} যোগ করুন`}
                       >
                         <Plus className="w-3.5 h-3.5" />
@@ -291,16 +289,17 @@ export const FabricYardCalculator: React.FC<FabricYardCalculatorProps> = ({
             </div>
           </div>
 
-          {/* Step 4: Pick a Fabric to Pair */}
+          {/* Step 3: Pick a Fabric to Pair */}
           <div className="min-w-0 space-y-2">
-            <label className="block text-[clamp(0.78rem,3vw,0.875rem)] font-bold text-[#2B1615]">
-              ৪. কোন কাপড়ে বানাতে চান? (কাপড় নির্বাচন করুন):
+            <label htmlFor="calc-fabric-select" className="block text-xs sm:text-sm font-bold text-[#241614]">
+              ৩. কোন কাপড়ে বানাতে চান? (কাপড় নির্বাচন করুন):
             </label>
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-2.5 min-w-0">
               <select
+                id="calc-fabric-select"
                 value={chosenProduct?.id || ''}
                 onChange={(e) => setSelectedProductId(e.target.value)}
-                className="w-full sm:flex-1 min-w-0 min-h-[42px] box-border bg-white border border-[#DFC9AA] focus:border-[#6B0812] rounded-xl px-3 py-2 text-xs sm:text-[13px] font-medium text-[#2B1615] focus:outline-hidden"
+                className="w-full sm:flex-1 min-w-0 min-h-[44px] box-border bg-[#FFFDF9] border border-[#DFC9AA] focus:border-[#6B0812] rounded-xl px-3.5 py-2 text-xs sm:text-[13px] font-medium text-[#241614] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
               >
                 {matchingFabrics.map((prod) => (
                   <option key={prod.id} value={prod.id}>
@@ -311,7 +310,7 @@ export const FabricYardCalculator: React.FC<FabricYardCalculatorProps> = ({
               <button
                 type="button"
                 onClick={() => navigateTo('shop', { width: fabricWidth })}
-                className="w-full sm:w-auto min-h-[38px] px-3.5 py-2 rounded-xl bg-[#FAF3E8] hover:bg-[#F1E4D1] border border-[#DFC9AA] text-xs font-bold text-[#6B0812] transition-colors cursor-pointer shrink-0 text-center"
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2 rounded-xl bg-[#FAF3E8] hover:bg-[#F1E3CE] border border-[#DFC9AA] text-xs font-bold text-[#6B0812] transition-colors cursor-pointer shrink-0 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
               >
                 সকল কাপড় দেখুন →
               </button>
@@ -319,15 +318,15 @@ export const FabricYardCalculator: React.FC<FabricYardCalculatorProps> = ({
           </div>
         </div>
 
-        {/* Right/Bottom Column: Full-Width Calculation Summary Card (Sticky only on lg+ Desktop) */}
+        {/* Right Column: Bespoke Atelier Measurement Summary Card */}
         <div className="lg:col-span-5 min-w-0">
-          <div className="w-full min-w-0 box-border bg-[#FAF6F0] p-3.5 sm:p-5 lg:p-6 rounded-xl sm:rounded-2xl border border-[#E5D4BE] lg:sticky lg:top-24 space-y-3.5 sm:space-y-4">
+          <div className="w-full min-w-0 box-border bg-[#FAF6F0] p-4 sm:p-5 lg:p-6 rounded-2xl border border-[#E2D0B8] shadow-[0_6px_20px_-10px_rgba(36,22,20,0.08)] lg:sticky lg:top-28 space-y-4">
             {/* Summary Header */}
-            <div className="flex items-center justify-between gap-2 border-b border-[#E5D4BE] pb-2.5 sm:pb-3 min-w-0">
-              <h3 className="text-[clamp(0.85rem,3.2vw,0.95rem)] font-bold text-[#610710] truncate">
+            <div className="flex items-center justify-between gap-2 border-b border-[#E2D0B8] pb-3 min-w-0">
+              <h4 className="text-sm sm:text-base font-extrabold text-[#6B0812] truncate">
                 পরিমাপ সারাংশ (Breakdown)
-              </h3>
-              <span className="text-xs px-2.5 py-0.5 bg-white border border-[#DFC9AA] text-[#6B0812] font-bold rounded-full shrink-0">
+              </h4>
+              <span className="text-xs px-2.5 py-1 bg-[#FFFDF9] border border-[#DFC9AA] text-[#6B0812] font-bold rounded-full shrink-0 tabular-nums">
                 {toBengaliNumber(fabricWidth)} বহর
               </span>
             </div>
@@ -342,13 +341,13 @@ export const FabricYardCalculator: React.FC<FabricYardCalculatorProps> = ({
                   <span className="break-words min-w-0 flex-1">
                     {item.item} {item.count > 1 ? `(${toBengaliNumber(item.count)}টি)` : ''}
                   </span>
-                  <span className="font-bold text-[#2B1615] tabular-nums shrink-0">
+                  <span className="font-bold text-[#241614] tabular-nums shrink-0">
                     {toBengaliNumber(item.yards)} গজ
                   </span>
                 </div>
               ))}
               {customAdjustment > 0 && (
-                <div className="flex items-start justify-between gap-2 text-[#5C433E] italic min-w-0">
+                <div className="flex items-start justify-between gap-2 text-[#523A35] italic min-w-0">
                   <span className="break-words min-w-0 flex-1">
                     উচ্চতা ও কাটিং অতিরিক্ত মার্জিন
                   </span>
@@ -360,20 +359,20 @@ export const FabricYardCalculator: React.FC<FabricYardCalculatorProps> = ({
             </div>
 
             {/* Grand Total Yards & Price Highlight Box */}
-            <div className="w-full min-w-0 box-border p-3 sm:p-4 bg-white rounded-xl border border-[#DFC9AA] grid grid-cols-2 gap-2 items-center shadow-2xs">
+            <div className="w-full min-w-0 box-border p-3.5 sm:p-4 bg-[#FFFDF9] rounded-xl border border-[#DFC9AA] grid grid-cols-2 gap-3 items-center shadow-2xs">
               <div className="min-w-0">
-                <span className="text-[11px] sm:text-xs font-medium text-[#5C433E] block">
+                <span className="text-[11px] sm:text-xs font-medium text-[#523A35] block">
                   মোট প্রয়োজনীয় কাপড়:
                 </span>
-                <span className="text-[clamp(1.15rem,4.8vw,1.5rem)] font-extrabold text-[#6B0812] tabular-nums leading-tight block mt-0.5">
+                <span className="text-[clamp(1.2rem,4.8vw,1.55rem)] font-extrabold text-[#6B0812] tabular-nums leading-tight block mt-0.5">
                   {toBengaliNumber(calculation.totalYards)} গজ
                 </span>
               </div>
-              <div className="text-right min-w-0 border-l border-[#EFE3D2] pl-2">
-                <span className="text-[11px] sm:text-xs font-medium text-[#5C433E] block">
+              <div className="text-right min-w-0 border-l border-[#EDE0CE] pl-3">
+                <span className="text-[11px] sm:text-xs font-medium text-[#523A35] block">
                   আনুমানিক ফ্যাব্রিক খরচ:
                 </span>
-                <span className="text-[clamp(1.1rem,4.5vw,1.35rem)] font-extrabold text-[#B87D14] tabular-nums leading-tight block mt-0.5">
+                <span className="text-[clamp(1.15rem,4.5vw,1.4rem)] font-extrabold text-[#8A5A10] tabular-nums leading-tight block mt-0.5">
                   ৳{toBengaliNumber(estimatedCost)}
                 </span>
               </div>
@@ -381,22 +380,22 @@ export const FabricYardCalculator: React.FC<FabricYardCalculatorProps> = ({
 
             {/* Chosen Product Summary */}
             {chosenProduct && (
-              <div className="w-full min-w-0 box-border text-xs text-[#4E3631] p-2.5 sm:p-3 bg-white/80 rounded-xl border border-[#E5D4BE]">
-                <div className="font-bold text-[#2B1615] break-words leading-snug">
+              <div className="w-full min-w-0 box-border text-xs text-[#523A35] p-3 bg-[#FFFDF9]/90 rounded-xl border border-[#E5D4BE]">
+                <div className="font-bold text-[#241614] break-words leading-snug">
                   {chosenProduct.name}
                 </div>
-                <div className="text-[11px] text-[#5C433E] mt-1">
+                <div className="text-[11px] text-[#523A35] mt-1 tabular-nums">
                   প্রতি গজ ৳{toBengaliNumber(chosenProduct.discountPrice || chosenProduct.pricePerYard)} · উপলব্ধ স্টক: {toBengaliNumber(chosenProduct.stockYards)} গজ
                 </div>
               </div>
             )}
 
-            {/* Touch-Friendly Full-Width Action Buttons */}
+            {/* Touch-Friendly Action Buttons (44px+ height) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2.5 pt-1 min-w-0">
               <button
                 type="button"
                 onClick={handleAddToCartCalculated}
-                className="w-full min-h-[44px] py-2.5 px-3 bg-white hover:bg-[#FAF3E8] border border-[#6B0812] text-[#6B0812] rounded-xl text-xs sm:text-[13px] font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs text-center"
+                className="w-full min-h-[44px] py-2.5 px-3 bg-[#FFFDF9] hover:bg-[#FAF3E8] active:scale-[0.99] border border-[#6B0812] text-[#6B0812] rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
               >
                 <span>কার্টে যোগ করুন ({toBengaliNumber(calculation.totalYards)} গজ)</span>
               </button>
@@ -404,14 +403,14 @@ export const FabricYardCalculator: React.FC<FabricYardCalculatorProps> = ({
               <button
                 type="button"
                 onClick={handleBuyNowCalculated}
-                className="w-full min-h-[44px] py-2.5 px-3 bg-[#6B0812] hover:bg-[#53050D] text-white rounded-xl text-xs sm:text-[13px] font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-sm text-center"
+                className="w-full min-h-[44px] py-2.5 px-3 bg-gradient-to-b from-[#7D0A15] to-[#63060F] hover:from-[#8C0C18] hover:to-[#53050D] active:scale-[0.99] text-white rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-[0_6px_16px_-4px_rgba(107,8,18,0.32),inset_0_1px_0_rgba(255,255,255,0.18)] text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
               >
                 <span>অর্ডার করুন (৳{toBengaliNumber(estimatedCost)})</span>
               </button>
             </div>
 
             {/* Bengali Disclaimer */}
-            <div className="pt-2 text-[11px] text-[#5C433E]/85 leading-relaxed border-t border-[#E5D4BE] break-words">
+            <div className="pt-2 text-[11px] text-[#523A35] leading-relaxed border-t border-[#E2D0B8] break-words">
               <span>
                 এই হিসাবটি আনুমানিক। পোশাকের ডিজাইন, সাইজ ও কাটিং অনুযায়ী কাপড়ের পরিমাণ পরিবর্তিত হতে পারে।
               </span>
@@ -422,4 +421,3 @@ export const FabricYardCalculator: React.FC<FabricYardCalculatorProps> = ({
     </div>
   );
 };
-

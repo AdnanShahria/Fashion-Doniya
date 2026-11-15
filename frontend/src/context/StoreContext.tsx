@@ -89,9 +89,9 @@ interface StoreContextType {
   openQuickView: (product: Product) => void;
   closeQuickView: () => void;
   loginDemoUser: (phone: string, fullName: string) => void;
-  loginUser: (phone: string, password: string) => boolean;
-  registerUser: (fullName: string, phone: string, password: string) => boolean;
-  resetPassword: (phone: string, newPassword: string) => boolean;
+  loginUser: (phone: string, password: string) => Promise<boolean>;
+  registerUser: (fullName: string, phone: string, password: string) => Promise<boolean>;
+  resetPassword: (phone: string, newPassword: string) => Promise<boolean>;
   logoutUser: () => void;
   updateUserProfile: (profile: Partial<CustomerUser>) => void;
   refreshData: () => void;
@@ -434,8 +434,9 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setCurrentPage('order-tracking');
     } else if (cleanPath === '/admin' || cleanPath.startsWith('/admin/')) {
       setCurrentPage('admin');
-    } else if (cleanPath === '/sysadm' || cleanPath.startsWith('/sysadm/')) {
-      setCurrentPage('sysadm');
+    // Disconnected: sysadm route handling preserved without deletion
+    // } else if (cleanPath === '/sysadm' || cleanPath.startsWith('/sysadm/')) {
+    //   setCurrentPage('sysadm');
     } else if (cleanPath === '/wishlist') {
       setCurrentPage('wishlist');
     } else if (cleanPath === '/account' || cleanPath.startsWith('/account/')) {
@@ -758,20 +759,26 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     showToast(`স্বাগতম, ${fullName}! লগইন সম্পন্ন হয়েছে।`, 'success');
   };
 
-  const loginUser = (phone: string, password: string): boolean => {
+  const loginUser = async (phone: string, password: string): Promise<boolean> => {
+    try {
+      const r = await api.post('/auth/login', { phone, password });
+      if (r.data?.success && r.data.user) {
+        useAuthStore.getState().setAuth(r.data.user, r.data.token);
+        setCurrentUser(r.data.user);
+        StorageService.setCurrentUser(r.data.user);
+        showToast(r.data.message || `স্বাগতম, ${r.data.user.fullName}!`, 'success');
+        return true;
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      if (msg) {
+        showToast(msg, 'error');
+        return false;
+      }
+    }
+
+    // Local / Offline fallback
     const res = StorageService.authenticateUser(phone, password);
-    api
-      .post('/auth/login', { phone, password })
-      .then((r) => {
-        if (r.data?.success && r.data.user) {
-          useAuthStore.getState().setAuth(r.data.user, r.data.token);
-          setCurrentUser(r.data.user);
-          if (!res.success) {
-            showToast(r.data.message || `স্বাগতম, ${r.data.user.fullName}!`, 'success');
-          }
-        }
-      })
-      .catch(() => {});
     if (res.success && res.user) {
       setCurrentUser(res.user);
       useAuthStore.getState().setAuth(res.user);
@@ -782,17 +789,26 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return false;
   };
 
-  const registerUser = (fullName: string, phone: string, password: string): boolean => {
+  const registerUser = async (fullName: string, phone: string, password: string): Promise<boolean> => {
+    try {
+      const r = await api.post('/auth/register', { fullName, phone, password });
+      if (r.data?.success && r.data.user) {
+        useAuthStore.getState().setAuth(r.data.user, r.data.token);
+        setCurrentUser(r.data.user);
+        StorageService.setCurrentUser(r.data.user);
+        showToast(r.data.message || `রেজিস্ট্রেশন সফল হয়েছে! স্বাগতম, ${r.data.user.fullName}!`, 'success');
+        return true;
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      if (msg) {
+        showToast(msg, 'error');
+        return false;
+      }
+    }
+
+    // Local / Offline fallback
     const res = StorageService.registerUser(fullName, phone, password);
-    api
-      .post('/auth/register', { fullName, phone, password })
-      .then((r) => {
-        if (r.data?.success && r.data.user) {
-          useAuthStore.getState().setAuth(r.data.user, r.data.token);
-          setCurrentUser(r.data.user);
-        }
-      })
-      .catch(() => {});
     if (res.success && res.user) {
       setCurrentUser(res.user);
       useAuthStore.getState().setAuth(res.user);
@@ -803,9 +819,23 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return false;
   };
 
-  const resetPassword = (phone: string, newPassword: string): boolean => {
+  const resetPassword = async (phone: string, newPassword: string): Promise<boolean> => {
+    try {
+      const r = await api.post('/auth/forgot-password', { phone, newPassword });
+      if (r.data?.success) {
+        showToast(r.data.message || 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!', 'success');
+        return true;
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      if (msg) {
+        showToast(msg, 'error');
+        return false;
+      }
+    }
+
+    // Local / Offline fallback
     const res = StorageService.resetUserPassword(phone, newPassword);
-    api.post('/auth/forgot-password', { phone, newPassword }).catch(() => {});
     if (res.success) {
       showToast(res.message, 'success');
       return true;

@@ -175,7 +175,8 @@ const AppContent: React.FC = () => {
     }
   }, [currentPage, selectedProduct, settings]);
 
-  // Surface 1: Layoutless SysAdm Console
+  // Surface 1: SysAdm Console (Disconnected as requested; preserved without deletion)
+  /*
   if (location.pathname.startsWith('/sysadm') || currentPage === 'sysadm') {
     return (
       <div data-layoutless="true">
@@ -186,6 +187,7 @@ const AppContent: React.FC = () => {
       </div>
     );
   }
+  */
 
   // Surface 2: Layoutless Admin Dashboard
   if (location.pathname.startsWith('/admin') || currentPage === 'admin') {

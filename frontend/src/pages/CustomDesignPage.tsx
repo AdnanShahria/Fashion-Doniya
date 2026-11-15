@@ -871,13 +871,14 @@ export const CustomDesignPage: React.FC = () => {
                     <Ruler className="w-3.5 h-3.5" />
                   </span>
                   <span
-                    className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md shrink-0 ${
+                    className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md shrink-0 inline-flex items-center gap-1 ${
                       sizeMode === 'custom'
                         ? 'bg-[#D5A64A] text-[#1C1B19]'
                         : 'bg-[#D5A64A]/20 text-[#7A4E12] border border-[#D5A64A]/50'
                     }`}
                   >
-                    কাস্টম ফিটিং ✂️
+                    <Scissors className="w-3 h-3" />
+                    <span>কাস্টম ফিটিং</span>
                   </span>
                 </div>
                 <div className="w-full space-y-0">

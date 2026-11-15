@@ -1,6 +1,6 @@
 import React from 'react';
 import { useStore } from '../../context/StoreContext';
-import { CheckCircle2, Info, AlertCircle, X } from 'lucide-react';
+import { CheckCircle2, Info, AlertCircle } from 'lucide-react';
 
 export const ToastNotification: React.FC = () => {
   const { toast } = useStore();
@@ -10,32 +10,38 @@ export const ToastNotification: React.FC = () => {
   const getIcon = () => {
     switch (toast.type) {
       case 'success':
-        return <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />;
+        return <CheckCircle2 className="w-4 h-4 text-[#14533C] shrink-0" />;
       case 'error':
-        return <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />;
+        return <AlertCircle className="w-4 h-4 text-[#9E0B16] shrink-0" />;
       case 'info':
       default:
-        return <Info className="w-4 h-4 text-[#C5A46D] shrink-0" />;
+        return <Info className="w-4 h-4 text-[#8A5A10] shrink-0" />;
     }
   };
 
   const getBorder = () => {
     switch (toast.type) {
       case 'success':
-        return 'border-emerald-200 bg-white';
+        return 'border-[#B8D8C8]';
       case 'error':
-        return 'border-rose-200 bg-white';
+        return 'border-[#E6B8BC]';
       case 'info':
       default:
-        return 'border-[#EDE5D9] bg-white';
+        return 'border-[#DFCBB2]';
     }
   };
 
   return (
-    <div className="fixed top-20 right-4 sm:right-6 z-50 max-w-sm animate-in fade-in slide-in-from-top-4 duration-200 shadow-xl rounded-lg">
-      <div className={`flex items-center gap-3 p-3.5 rounded-lg border ${getBorder()} text-xs font-medium text-[#242424]`}>
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed top-20 right-4 sm:right-6 z-50 max-w-sm animate-in fade-in slide-in-from-top-3 duration-200"
+    >
+      <div
+        className={`flex items-center gap-3 px-4 py-3 rounded-2xl border ${getBorder()} glass-control-light shadow-[0_14px_34px_-10px_rgba(36,22,20,0.22)] text-xs sm:text-[13px] font-semibold text-[#241614]`}
+      >
         {getIcon()}
-        <span className="flex-1 leading-normal">{toast.text}</span>
+        <span className="flex-1 leading-snug">{toast.text}</span>
       </div>
     </div>
   );

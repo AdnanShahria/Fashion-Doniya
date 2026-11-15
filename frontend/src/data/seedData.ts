@@ -1665,7 +1665,7 @@ export const INITIAL_FABRIC_CATEGORIES: Record<FabricCollectionType, FabricCateg
     {
       id: 'fcat-35-long-koti',
       collection_type: '3.5_bahar',
-      name: 'নেহ কটি',
+      name: 'লং কটি',
       matchCategoryName: 'লং কটি',
       slug: 'long-koti',
       description: 'ঐতিহ্যবাহী ও ফরমাল কটির জন্য বিশেষ কাপড়',
@@ -1989,7 +1989,7 @@ export const INITIAL_CATEGORY_MEASUREMENT_GUIDES: CategoryMeasurementGuideRecord
     id: 'guide-3.5-long-koti',
     fabricWidth: '3.5',
     categorySlug: 'long-koti',
-    categoryName: 'নেহ কটি',
+    categoryName: 'লং কটি',
     suggestedYards: 2.5,
     isAdminDefined: false,
     suggestedYardsLabel: '২.৫ গজ',

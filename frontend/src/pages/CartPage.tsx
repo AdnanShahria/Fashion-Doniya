@@ -377,22 +377,26 @@ export const CartPage: React.FC = () => {
             </form>
 
             {/* Sample Coupons hint */}
-            <div className="text-[11px] text-[#242424]/60 bg-white p-2.5 rounded-md border border-[#EDE5D9]/60">
-              💡 ব্যবহার করুন: <span className="font-bold text-[#242424]">DONIYA10</span> (১০% ছাড়) অথবা <span className="font-bold text-[#242424]">FASHION50</span> (৳৫০ ছাড়)
+            <div className="text-[11px] text-[#523A35] bg-[#FAF8F4] p-2.5 rounded-lg border border-[#EDE5D9] flex items-center gap-2">
+              <Tag className="w-3.5 h-3.5 text-[#C59B48] shrink-0" />
+              <span>
+                কুপন ব্যবহার করুন: <span className="font-bold text-[#6B0812]">DONIYA10</span> (১০% ছাড়) অথবা <span className="font-bold text-[#6B0812]">FASHION50</span> (৳৫০ ছাড়)
+              </span>
             </div>
 
             {/* Proceed to Checkout CTA */}
             <button
               onClick={() => navigateTo('checkout')}
-              className="w-full py-3.5 px-4 bg-[#242424] hover:bg-[#C5A46D] text-white text-xs sm:text-sm font-bold rounded-lg shadow-md transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-3.5 px-4 bg-gradient-to-r from-[#850B16] via-[#6B0812] to-[#54050D] hover:from-[#960D19] hover:to-[#6B0812] active:scale-[0.98] text-white text-xs sm:text-sm font-bold rounded-xl shadow-[0_6px_20px_-4px_rgba(107,8,18,0.35)] transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <span>চেকআউটে এগিয়ে যান</span>
               <ArrowRight className="w-4 h-4" />
             </button>
 
             {/* Trust note */}
-            <div className="text-center text-[11px] text-[#242424]/50">
-              🔒 পণ্য হাতে পেয়ে চেক করে মূল্য পরিশোধ করুন
+            <div className="text-center text-[11px] text-[#523A35]/80 flex items-center justify-center gap-1.5 pt-1">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>পণ্য হাতে পেয়ে চেক করে মূল্য পরিশোধ করুন</span>
             </div>
 
           </div>

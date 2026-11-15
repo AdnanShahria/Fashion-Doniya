@@ -178,7 +178,22 @@ reviewsRouter.post('/', async (c) => {
 couponsRouter.get('/', async (c) => {
   const db = c.get('db');
   const rows = await db.select().from(coupons);
-  return c.json({ success: true, coupons: rows.filter((cp) => cp.isActive) });
+  const activeFromDb = rows.filter((cp) => cp.isActive);
+
+  const { settings } = await getStoreAndPaymentSettings(db);
+  const activeFromSettings = (settings.coupons || []).filter((cp) => cp.isActive);
+
+  const codeMap = new Map<string, unknown>();
+  for (const cp of activeFromDb) {
+    if (cp.code) codeMap.set(cp.code.toUpperCase(), cp);
+  }
+  for (const cp of activeFromSettings) {
+    if (cp.code && !codeMap.has(cp.code.toUpperCase())) {
+      codeMap.set(cp.code.toUpperCase(), cp);
+    }
+  }
+
+  return c.json({ success: true, coupons: Array.from(codeMap.values()) });
 });
 
 couponsRouter.post('/validate', async (c) => {

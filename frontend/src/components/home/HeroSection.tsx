@@ -574,15 +574,15 @@ export const HeroSection: React.FC = () => {
   ];
 
   return (
-    <section className="max-w-[1400px] mx-auto px-2.5 sm:px-6 lg:px-8 pt-2.5 sm:pt-5 pb-3 sm:pb-8 space-y-2.5 sm:space-y-5">
-      {/* MOBILE PREMIUM STACKED HERO CARD (< 640px) — Matches reference image_0746490e.png */}
+    <section className="max-w-[1400px] mx-auto px-2.5 sm:px-6 lg:px-8 pt-2.5 sm:pt-5 pb-3 sm:pb-6 space-y-3 sm:space-y-5">
+      {/* MOBILE PREMIUM STACKED HERO CARD (< 640px) */}
       <div
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        className="sm:hidden rounded-[22px] bg-[#FAF6F0] border border-[#E8D9C5] p-3 shadow-[0_8px_24px_-10px_rgba(107,8,18,0.10)]"
+        className="sm:hidden rounded-[24px] bg-[#FFFDF9] border border-[#E6D7C3] p-3 shadow-[0_10px_30px_-12px_rgba(107,8,18,0.12)]"
       >
         {/* Top Luxury Fabric & Lantern Studio Photo */}
-        <div className="relative w-full aspect-[960/516] rounded-[16px] overflow-hidden bg-[#F5EAE0]">
+        <div className="relative w-full aspect-[960/516] rounded-[18px] overflow-hidden bg-[#F5EAE0] ring-1 ring-inset ring-black/5">
           {(currentSlide.imageUrl || mobilePhotoUrl) && (
             <img
               src={currentSlide.imageUrl || mobilePhotoUrl}
@@ -598,7 +598,7 @@ export const HeroSection: React.FC = () => {
             type="button"
             onClick={handleNextSlide}
             aria-label="পরবর্তী স্লাইড"
-            className="absolute bottom-[5.2%] right-[2.2%] z-10 bg-[#5B0810] text-white border border-[#C5A46D]/60 rounded-full px-3 py-0.5 text-[11px] font-bold tracking-wider tabular-nums cursor-pointer"
+            className="absolute bottom-2.5 right-2.5 z-10 min-h-[28px] bg-[#5B0810]/90 backdrop-blur-md text-white border border-[#E5C687]/55 rounded-full px-3 py-1 text-[11px] font-bold tracking-wider tabular-nums cursor-pointer active:scale-95 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E5C687]"
           >
             {`0${activeSlide + 1} / 0${slides.length}`}
           </button>
@@ -606,22 +606,22 @@ export const HeroSection: React.FC = () => {
 
         {/* Bottom Bengali Content & Dual Pill CTA Buttons */}
         <div className="pt-3.5 px-1 pb-1">
-          {/* Gold Kicker + Horizontal Gold Rule */}
+          {/* Accessible Antique Gold Kicker + Horizontal Rule */}
           <div className="flex items-center gap-2.5">
-            <span className="text-[11px] font-extrabold tracking-[0.08em] text-[#B37E22] uppercase">
+            <span className="text-[11px] font-extrabold tracking-[0.09em] text-[#8A5A10] uppercase">
               {currentSlide.kicker}
             </span>
-            <span className="w-11 h-[1.5px] bg-[#C59B48] rounded-full shrink-0" />
+            <span className="w-11 h-[1.5px] bg-[#C59B48] rounded-full shrink-0" aria-hidden="true" />
           </div>
 
           {/* Main Bold Maroon Headline */}
-          <h1 className="text-[20px] min-[380px]:text-[22px] font-extrabold text-[#6E0811] leading-[1.28] tracking-tight mt-1.5">
+          <h1 className="text-[21px] min-[380px]:text-[23px] font-extrabold text-[#6B0812] leading-[1.24] tracking-tight mt-1.5">
             {currentSlide.mobileHeadline}
           </h1>
 
           {/* Golden Italic Sub-headline + Curved Gold Brush Swoosh */}
           <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-[17px] min-[380px]:text-[18.5px] font-bold italic text-[#B68226] leading-snug">
+            <span className="text-[17px] min-[380px]:text-[18.5px] font-bold italic text-[#8A5A10] leading-snug">
               {currentSlide.mobileSubHeadline}
             </span>
             <svg
@@ -641,16 +641,16 @@ export const HeroSection: React.FC = () => {
           </div>
 
           {/* Supporting Bengali Description */}
-          <p className="text-[12.5px] min-[380px]:text-[13px] font-medium text-[#3B2F2D] leading-[1.55] mt-2">
+          <p className="text-[13px] font-medium text-[#3B2623] leading-[1.58] mt-2">
             {currentSlide.mobileDescription}
           </p>
 
-          {/* Two Pill CTA Buttons */}
+          {/* Two Pill CTA Buttons (44px+ hit region) */}
           <div className="grid grid-cols-2 gap-2.5 pt-3.5">
             <button
               type="button"
               onClick={currentSlide.primaryAction}
-              className="py-2.5 px-3 rounded-full bg-gradient-to-r from-[#820711] to-[#68050D] active:scale-[0.98] text-white font-bold text-[13px] shadow-[0_6px_14px_rgba(110,8,17,0.25)] flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+              className="min-h-[44px] py-2.5 px-3 rounded-full bg-gradient-to-b from-[#7D0A15] to-[#63060F] active:scale-[0.98] text-white font-bold text-[13px] shadow-[0_8px_18px_-4px_rgba(107,8,18,0.34),inset_0_1px_0_rgba(255,255,255,0.2)] flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] focus-visible:ring-offset-2"
             >
               <ShoppingCart className="w-4 h-4 text-white stroke-[2] shrink-0" />
               <span>{currentSlide.primaryCta}</span>
@@ -660,16 +660,16 @@ export const HeroSection: React.FC = () => {
             <button
               type="button"
               onClick={() => navigateTo('calculator')}
-              className="py-2.5 px-3 rounded-full bg-[#FFFDF9] active:bg-[#FAF3E8] active:scale-[0.98] text-[#6E0811] border-[1.5px] border-[#C69A45] font-bold text-[13px] shadow-[0_2px_8px_rgba(198,154,69,0.12)] flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+              className="min-h-[44px] py-2.5 px-3 rounded-full bg-[#FAF6F0] active:bg-[#F1E6D6] active:scale-[0.98] text-[#6B0812] border-[1.5px] border-[#C59B48] font-bold text-[13px] shadow-[0_2px_8px_rgba(138,90,16,0.10)] flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] focus-visible:ring-offset-2"
             >
-              <Calculator className="w-4 h-4 text-[#B8821E] stroke-[2] shrink-0" />
+              <Calculator className="w-4 h-4 text-[#8A5A10] stroke-[2] shrink-0" />
               <span>{currentSlide.secondaryCta}</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* LAPTOP / DESKTOP HERO BANNER (Unchanged >= 640px) */}
+      {/* LAPTOP / DESKTOP HERO BANNER (>= 640px) */}
       <div
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
@@ -680,46 +680,50 @@ export const HeroSection: React.FC = () => {
             currentSlide.imageUrl || cleanBannerUrl
               ? `url(${currentSlide.imageUrl || cleanBannerUrl})`
               : undefined,
-          backgroundSize: '100% 100%',
+          backgroundSize: currentSlide.imageUrl ? 'cover' : '100% 100%',
           backgroundPosition: 'center right',
           backgroundRepeat: 'no-repeat',
           filter: currentSlide.filterCss
         }}
-        className="hidden sm:flex relative w-full rounded-2xl overflow-hidden border border-[#E6D8C5] bg-[#F5EAE0] min-h-[380px] lg:min-h-[440px] bg-cover items-center transition-all duration-500"
+        className="hidden sm:flex relative w-full rounded-[22px] overflow-hidden border border-[#E2D2BC] bg-[#F5EAE0] min-h-[390px] lg:min-h-[456px] shadow-[0_18px_48px_-20px_rgba(36,22,20,0.22)] items-center transition-all duration-500"
       >
-        {currentSlide.imageUrl && (
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 left-0 w-[62%] bg-gradient-to-r from-[#FAF4EC]/95 via-[#FAF4EC]/80 to-transparent z-0"
-          />
-        )}
+        {/* Subtle left silk legibility veil */}
+        <div
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-y-0 left-0 z-0 ${
+            currentSlide.imageUrl
+              ? 'w-[65%] bg-gradient-to-r from-[#FAF4EC]/95 via-[#FAF4EC]/82 to-transparent'
+              : 'w-[54%] bg-gradient-to-r from-[#FAF4EC]/55 via-[#FAF4EC]/25 to-transparent'
+          }`}
+        />
+
         {/* Left Content Layer */}
-        <div className="relative z-10 w-[54%] lg:w-[48%] pl-14 pr-8 lg:pl-20 lg:pr-6 py-10 space-y-4">
-          {/* Small Gold Kicker */}
-          <div className="inline-flex items-center gap-1.5">
-            <span className="w-6 h-[1px] bg-[#C58B1E]" />
-            <span className="text-[11px] font-bold tracking-[0.14em] text-[#9E690C] uppercase whitespace-nowrap">
+        <div className="relative z-10 w-[56%] lg:w-[49%] pl-14 pr-8 lg:pl-20 lg:pr-6 py-10 space-y-4">
+          {/* Accessible Antique Gold Kicker */}
+          <div className="inline-flex items-center gap-2">
+            <span className="w-6 h-[1.5px] bg-[#C59B48] rounded-full" aria-hidden="true" />
+            <span className="text-[11px] font-extrabold tracking-[0.15em] text-[#8A5A10] uppercase whitespace-nowrap">
               {currentSlide.kicker}
             </span>
           </div>
 
-          {/* Clean Bengali Headline */}
-          <h1 className="text-4xl lg:text-[44px] font-bold text-[#6B0812] leading-[1.2] tracking-tight">
+          {/* Clean Bengali Display Headline */}
+          <h1 className="text-4xl lg:text-[46px] font-extrabold text-[#6B0812] leading-[1.18] tracking-tight">
             <span className="block">{currentSlide.headlineLine1}</span>
-            <span className="block mt-0.5 text-[#52050D]">{currentSlide.headlineLine2}</span>
+            <span className="block mt-1 text-[#4E050C]">{currentSlide.headlineLine2}</span>
           </h1>
 
           {/* Supporting Text */}
-          <p className="text-[16px] font-normal text-[#4E2A28] leading-relaxed max-w-md line-clamp-2">
+          <p className="text-[15.5px] lg:text-[16.5px] font-medium text-[#3B2623] leading-relaxed max-w-md line-clamp-2">
             {currentSlide.description}
           </p>
 
-          {/* Clean Minimal CTA Buttons */}
-          <div className="flex flex-wrap items-center gap-3 pt-1.5">
+          {/* Clean Tactile CTA Buttons */}
+          <div className="flex flex-wrap items-center gap-3 pt-2">
             <button
               type="button"
               onClick={currentSlide.primaryAction}
-              className="px-6 py-3 rounded-xl bg-[#6B0812] hover:bg-[#55060E] text-white font-semibold text-[15px] transition-colors flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
+              className="min-h-[46px] px-6 py-3 rounded-xl bg-gradient-to-b from-[#7D0A15] to-[#63060F] hover:from-[#8C0C18] hover:to-[#53050D] active:scale-[0.98] text-white font-semibold text-[15px] shadow-[0_10px_24px_-6px_rgba(107,8,18,0.34),inset_0_1px_0_rgba(255,255,255,0.18)] transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] focus-visible:ring-offset-2"
             >
               <ShoppingCart className="w-4 h-4 text-white stroke-[1.9] shrink-0" />
               <span>{currentSlide.primaryCta}</span>
@@ -729,36 +733,36 @@ export const HeroSection: React.FC = () => {
             <button
               type="button"
               onClick={() => navigateTo('calculator')}
-              className="px-6 py-3 rounded-xl bg-[#FFFDF9]/95 hover:bg-[#FAF3E8] text-[#6B0812] border border-[#C58B1E]/80 font-semibold text-[15px] transition-colors flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
+              className="min-h-[46px] px-6 py-3 rounded-xl bg-[#FFFDF9]/92 backdrop-blur-sm hover:bg-[#FFFDF9] active:scale-[0.98] text-[#6B0812] border border-[#C59B48] font-semibold text-[15px] shadow-[0_4px_14px_-4px_rgba(36,22,20,0.08)] transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] focus-visible:ring-offset-2"
             >
-              <Calculator className="w-4 h-4 text-[#B87D14] stroke-[1.9] shrink-0" />
+              <Calculator className="w-4 h-4 text-[#8A5A10] stroke-[1.9] shrink-0" />
               <span>{currentSlide.secondaryCta}</span>
             </button>
           </div>
         </div>
 
-        {/* Small, Elegant Left Carousel Arrow */}
+        {/* Frosted Glass Left Carousel Arrow */}
         <button
           type="button"
           onClick={handlePrevSlide}
           aria-label="পূর্ববর্তী স্লাইড"
-          className="absolute left-3.5 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-[#FFFDF9]/90 hover:bg-[#FFFDF9] border border-[#E6D8C5] text-[#6B0812] flex items-center justify-center transition-colors cursor-pointer"
+          className="absolute left-3.5 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full glass-control-light hover:bg-[#FFFDF9] border border-[#E2D2BC] text-[#6B0812] shadow-[0_4px_14px_rgba(36,22,20,0.10)] flex items-center justify-center transition-all active:scale-95 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
         >
-          <ChevronLeft className="w-4 h-4 stroke-[1.8]" />
+          <ChevronLeft className="w-4 h-4 stroke-[2]" />
         </button>
 
-        {/* Small, Elegant Right Carousel Arrow */}
+        {/* Frosted Glass Right Carousel Arrow */}
         <button
           type="button"
           onClick={handleNextSlide}
           aria-label="পরবর্তী স্লাইড"
-          className="absolute right-3.5 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-[#FFFDF9]/90 hover:bg-[#FFFDF9] border border-[#E6D8C5] text-[#6B0812] flex items-center justify-center transition-colors cursor-pointer"
+          className="absolute right-3.5 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full glass-control-light hover:bg-[#FFFDF9] border border-[#E2D2BC] text-[#6B0812] shadow-[0_4px_14px_rgba(36,22,20,0.10)] flex items-center justify-center transition-all active:scale-95 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
         >
-          <ChevronRight className="w-4 h-4 stroke-[1.8]" />
+          <ChevronRight className="w-4 h-4 stroke-[2]" />
         </button>
 
-        {/* Small, Elegant Slide Indicators */}
-        <div className="absolute bottom-4 right-5 z-20 bg-[#FFFDF9]/85 backdrop-blur-xs border border-[#E6D8C5] px-2 py-1 rounded-full flex items-center gap-1.5">
+        {/* Frosted Glass Slide Indicators */}
+        <div className="absolute bottom-4 right-5 z-20 glass-control-light border border-[#E2D2BC] px-2.5 py-1.5 rounded-full flex items-center gap-1.5 shadow-[0_4px_12px_rgba(36,22,20,0.08)]">
           {slides.map((slide, idx) => {
             const isActive = idx === activeSlide;
             return (
@@ -767,10 +771,11 @@ export const HeroSection: React.FC = () => {
                 type="button"
                 onClick={() => setActiveSlide(idx)}
                 aria-label={`স্লাইড ${idx + 1}`}
-                className={`h-1.5 rounded-full transition-all duration-200 cursor-pointer ${
+                aria-current={isActive ? 'true' : undefined}
+                className={`h-2 rounded-full transition-all duration-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] ${
                   isActive
-                    ? 'w-4 bg-[#6B0812]'
-                    : 'w-1.5 bg-[#C58B1E]/55 hover:bg-[#6B0812]/60'
+                    ? 'w-5 bg-[#6B0812]'
+                    : 'w-2 bg-[#C59B48]/65 hover:bg-[#6B0812]/65'
                 }`}
               />
             );
@@ -778,31 +783,30 @@ export const HeroSection: React.FC = () => {
         </div>
       </div>
 
-      {/* 4 FEATURE CARDS BELOW HERO BANNER (Clean 2-Column Mobile Grid Matching Laptop Aesthetic) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+      {/* 4 FEATURE CARDS BELOW HERO BANNER — Warm Architectural Trust Rail */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3.5">
         {featureCards.map((card, index) => {
           const IconComponent = card.icon;
           return (
-            <div
+            <button
               key={index}
+              type="button"
               onClick={card.onClick}
-              className="group bg-[#FFFDF9] rounded-xl border border-[#E6D8C5] hover:border-[#C58B1E] px-2.5 py-2.5 sm:px-4 sm:py-3.5 transition-colors flex items-center gap-2 sm:gap-3.5 cursor-pointer"
+              className="group text-left bg-[#FFFDF9] rounded-2xl border border-[#E6D8C5] hover:border-[#C59B48] px-3 py-2.5 sm:px-4 sm:py-3.5 shadow-[0_2px_10px_-6px_rgba(36,22,20,0.08)] hover:shadow-[0_10px_24px_-10px_rgba(107,8,18,0.14)] transition-all duration-200 flex items-center gap-2.5 sm:gap-3.5 cursor-pointer active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] focus-visible:ring-offset-2"
             >
-              {/* Small Burgundy Outline Icon */}
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-[#FAF5ED] border border-[#EAE0D2] flex items-center justify-center text-[#6B0812] shrink-0">
-                <IconComponent className="w-4 h-4 sm:w-5 sm:h-5 stroke-[1.75]" />
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#FAF3E8] border border-[#E8D8C3] group-hover:border-[#C59B48]/60 flex items-center justify-center text-[#6B0812] shrink-0 transition-colors">
+                <IconComponent className="w-4 h-4 sm:w-5 sm:h-5 stroke-[1.8]" />
               </div>
 
-              {/* Complete Readable Bengali Title & Subtitle */}
               <div className="min-w-0">
-                <h3 className="text-[11px] sm:text-[15px] font-bold text-[#6B0812] leading-snug">
+                <h3 className="text-[12px] sm:text-[15px] font-bold text-[#6B0812] leading-snug">
                   {card.title}
                 </h3>
-                <p className="text-[9.5px] sm:text-xs text-[#6E5048] mt-0.5 leading-snug">
+                <p className="text-[11px] sm:text-xs text-[#5E4037] mt-0.5 leading-snug">
                   {card.subtitle}
                 </p>
               </div>
-            </div>
+            </button>
           );
         })}
       </div>

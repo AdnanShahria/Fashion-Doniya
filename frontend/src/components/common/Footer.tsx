@@ -78,10 +78,10 @@ export const Footer: React.FC = () => {
                   <Icon className="w-4 h-4 sm:w-5 sm:h-5 stroke-[1.8]" />
                 </div>
                 <div className="min-w-0">
-                  <h4 className="text-[11px] sm:text-[13.5px] font-bold text-[#FFFDF9] leading-tight truncate">
+                  <h4 className="text-xs sm:text-[13.5px] font-bold text-[#FFFDF9] leading-tight truncate">
                     {feat.title}
                   </h4>
-                  <p className="text-[9.5px] sm:text-[11.5px] text-[#EDE5D9]/70 leading-tight truncate mt-0.5">
+                  <p className="text-[11px] sm:text-xs text-[#EDE5D9]/80 leading-tight truncate mt-0.5">
                     {feat.desc}
                   </p>
                 </div>
@@ -280,7 +280,7 @@ export const Footer: React.FC = () => {
                   value={newsletterEmail}
                   onChange={(e) => setNewsletterEmail(e.target.value)}
                   placeholder="আপনার ইমেইল অ্যাড্রেস..."
-                  className="w-full bg-transparent px-3 py-2 text-xs text-[#FFFDF9] placeholder-[#EDE5D9]/40 focus:outline-none"
+                  className="w-full bg-transparent px-3 py-2 text-xs text-[#FFFDF9] placeholder-[#EDE5D9]/60 focus:outline-none"
                 />
                 <button 
                   type="submit"
@@ -293,7 +293,7 @@ export const Footer: React.FC = () => {
             </form>
 
             <div className="pt-2 border-t border-[#3D1418]/60 space-y-2">
-              <div className="flex items-center gap-3 text-xs text-[#EDE5D9]/75">
+              <div className="flex items-center gap-3 text-xs text-[#EDE5D9]/85">
                 <button onClick={() => navigateTo('about')} className="hover:text-[#D5A64A] transition-colors cursor-pointer">
                   আমাদের সম্পর্কে
                 </button>
@@ -304,7 +304,7 @@ export const Footer: React.FC = () => {
                 <span>·</span>
                 <button 
                   onClick={() => navigateTo('admin')} 
-                  className="hover:text-[#D5A64A] transition-colors cursor-pointer text-[#D5A64A]"
+                  className="hover:text-[#D5A64A] transition-colors cursor-pointer text-[#E5C687]"
                 >
                   অ্যাডমিন প্যানেল
                 </button>
@@ -313,7 +313,7 @@ export const Footer: React.FC = () => {
               <div>
                 <button 
                   onClick={handleResetData}
-                  className="text-[11px] text-[#EDE5D9]/50 hover:text-red-400 transition-colors flex items-center gap-1 cursor-pointer"
+                  className="text-xs text-[#EDE5D9]/75 hover:text-red-300 transition-colors flex items-center gap-1 cursor-pointer"
                   title="রিসেট করে প্রাথমিক স্যাম্পল ডাটায় ফেরত যান"
                 >
                   <RefreshCw className="w-3 h-3" />
@@ -326,9 +326,9 @@ export const Footer: React.FC = () => {
         </div>
 
         {/* 3. Bottom Bar: Copyright & Payment Methods */}
-        <div className="pt-6 sm:pt-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left text-xs text-[#EDE5D9]/60">
+        <div className="pt-6 sm:pt-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left text-xs text-[#EDE5D9]/80">
           <p>© {new Date().getFullYear()} Fashion Doniya BD. সর্বস্বত্ব সংরক্ষিত।</p>
-          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 text-[11px] text-[#EDE5D9]/75">
+          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 text-xs text-[#EDE5D9]/85">
             <span className="text-[#D5A64A] font-semibold">পেমেন্ট সুবিধা:</span>
             <span className="px-2 py-0.5 rounded bg-[#351317] border border-[#48191E]">ক্যাশ অন ডেলিভারি</span>
             <span className="px-2 py-0.5 rounded bg-[#351317] border border-[#48191E]">বিকাশ</span>

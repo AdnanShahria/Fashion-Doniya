@@ -2,12 +2,25 @@
 
 @layer base {
   :root {
-    --brand-primary: #C5A46D;
-    --brand-charcoal: #242424;
-    --brand-cream: #FAF8F4;
+    /* Warm Atelier Token System */
+    --surface-canvas: #FAF6F0;
+    --surface-linen: #FFFDF9;
+    --surface-sand: #F3ECE0;
+    --surface-hairline: #E6D8C5;
+
+    --ink-primary: #241614;
+    --ink-secondary: #523A35;
+    --ink-muted: #6E5750;
+
+    --brand-primary: #6B0812;
+    --brand-primary-hover: #53050D;
+    --brand-zari: #C59B48;
+    --brand-zari-text: #8A5A10;
+    --brand-charcoal: #241614;
+    --brand-cream: #FAF6F0;
     --brand-beige: #EDE5D9;
   }
-  
+
   html {
     scroll-behavior: smooth;
     overflow-x: clip;
@@ -16,9 +29,11 @@
 
   body {
     font-family: 'Noto Sans Bengali', 'Hind Siliguri', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-    color: #242424;
-    background-color: #FAF6F0;
+    color: var(--ink-primary);
+    background-color: var(--surface-canvas);
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
     overflow-x: clip;
     max-width: 100%;
     min-height: 100dvh;
@@ -38,6 +53,68 @@
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+}
+
+/* Functional-layer translucent glass (navigation bars, floating controls, overlays) */
+@layer components {
+  .glass-functional {
+    background-color: rgba(250, 246, 240, 0.84);
+    -webkit-backdrop-filter: blur(22px) saturate(1.45);
+    backdrop-filter: blur(22px) saturate(1.45);
+  }
+
+  .glass-control-light {
+    background-color: rgba(255, 253, 249, 0.82);
+    -webkit-backdrop-filter: blur(14px) saturate(1.35);
+    backdrop-filter: blur(14px) saturate(1.35);
+  }
+
+  .card-atelier {
+    background-color: #FFFDF9;
+    border: 1px solid #E6D7C3;
+    box-shadow:
+      0 1px 2px rgba(36, 22, 20, 0.04),
+      0 8px 24px -10px rgba(107, 8, 18, 0.08);
+  }
+
+  .card-atelier:hover {
+    border-color: #C59B48;
+    box-shadow:
+      0 2px 6px rgba(36, 22, 20, 0.05),
+      0 16px 36px -12px rgba(107, 8, 18, 0.14);
+  }
+}
+
+/* Accessibility: Reduced Transparency & High Contrast Fallbacks */
+@media (prefers-reduced-transparency: reduce) {
+  .glass-functional,
+  .glass-control-light {
+    background-color: #FAF6F0 !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .glass-functional,
+  .glass-control-light {
+    background-color: #FFFDF9 !important;
+    border-color: #6B0812 !important;
+  }
+}
+
+/* Accessibility: Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

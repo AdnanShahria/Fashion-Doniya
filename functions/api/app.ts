@@ -343,8 +343,8 @@ app.onError((err, c) => {
   return c.json(formatSanitizedError(err, isDev), 500);
 });
 
-// 9. SuperAdmin (/api/v1/sysadm) mounted directly on app
-app.route('/api/v1/sysadm', sysadmRouter);
+// 9. SuperAdmin (/api/v1/sysadm) disconnected as requested (preserved without deletion)
+// app.route('/api/v1/sysadm', sysadmRouter);
 
 // 10. Mount Versioned v1 API (plus /api alias for backwards compatibility)
 const v1SubApp = createApiSubApp();

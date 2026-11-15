@@ -465,9 +465,9 @@ export const ShopPage: React.FC = () => {
 
                       <button
                         onClick={() => buyNow(product, product.minOrderQuantity || 1.5)}
-                        className="flex-1 sm:flex-none py-2 px-4 bg-[#242424] hover:bg-[#C5A46D] text-white rounded-md text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                        className="flex-1 sm:flex-none py-2 px-4 bg-[#6B0812] hover:bg-[#53050D] active:scale-[0.98] text-white rounded-lg text-xs font-semibold shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                       >
-                        <Zap className="w-3.5 h-3.5 text-[#C5A46D]" />
+                        <ShoppingBag className="w-3.5 h-3.5 text-[#C59B48]" />
                         <span>সরাসরি কিনুন</span>
                       </button>
                     </div>

@@ -62,6 +62,19 @@ export const productService = {
     return product;
   },
 
+  async saveProductAsync(product: Product): Promise<Product> {
+    this.saveProduct(product);
+    try {
+      const res = await api.post<{ success: boolean; product?: Product }>('/admin/products', { product });
+      if (res.data?.success && res.data.product) {
+        return res.data.product;
+      }
+    } catch {
+      // Handled locally
+    }
+    return product;
+  },
+
   deleteProduct(id: string): boolean {
     const products = this.getAllProducts();
     const filtered = products.filter(p => p.id !== id);
@@ -71,5 +84,15 @@ export const productService = {
       return true;
     }
     return false;
+  },
+
+  async deleteProductAsync(id: string): Promise<boolean> {
+    const ok = this.deleteProduct(id);
+    try {
+      await api.delete(`/admin/products/${encodeURIComponent(id)}`);
+    } catch {
+      // Handled locally
+    }
+    return ok;
   }
 };

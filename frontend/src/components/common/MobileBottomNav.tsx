@@ -101,17 +101,20 @@ export const MobileBottomNav: React.FC = () => {
       {/* Category Slide-Up Sheet for Mobile when "ক্যাটাগরি" is tapped */}
       {categorySheetOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px] md:hidden"
+          className="fixed inset-0 z-40 bg-[#1C0B0D]/40 backdrop-blur-[2px] md:hidden"
           onClick={() => setCategorySheetOpen(false)}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="কাপড়ের ক্যাটাগরি সমূহ"
             onClick={(e) => e.stopPropagation()}
-            className="absolute bottom-[78px] left-2 right-2 bg-[#FFFDF9] rounded-2xl border border-[#E5D4C0] shadow-[0_-12px_32px_rgba(107,8,18,0.18)] max-h-[70vh] flex flex-col overflow-hidden"
+            className="absolute bottom-[82px] left-2.5 right-2.5 bg-[#FFFDF9]/96 backdrop-blur-xl rounded-2xl border border-[#DFCBB2] shadow-[0_-14px_38px_rgba(36,22,20,0.22)] max-h-[70vh] flex flex-col overflow-hidden"
           >
             {/* Sheet Header */}
             <div className="px-4 py-3 bg-[#FAF5ED] border-b border-[#EAE0D2] flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-[#7A0915]" />
+                <Layers className="w-4 h-4 text-[#6B0812]" />
                 <h3 className="text-sm font-extrabold text-[#6B0812]">
                   কাপড়ের ক্যাটাগরি সমূহ
                 </h3>
@@ -119,7 +122,7 @@ export const MobileBottomNav: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setCategorySheetOpen(false)}
-                className="w-7 h-7 rounded-full bg-white border border-[#E5D4C0] text-[#6B0812] flex items-center justify-center cursor-pointer"
+                className="w-8 h-8 rounded-full bg-[#FFFDF9] border border-[#DFCBB2] text-[#6B0812] flex items-center justify-center cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
                 aria-label="বন্ধ করুন"
               >
                 <X className="w-4 h-4" />
@@ -134,7 +137,7 @@ export const MobileBottomNav: React.FC = () => {
                     key={idx}
                     type="button"
                     onClick={() => handleNavClick(item.action)}
-                    className="w-full px-3 py-2.5 rounded-xl bg-[#FAF6F0] hover:bg-[#F5ECE0] border border-[#E8DAC8] flex items-center justify-between gap-2 text-left transition-colors cursor-pointer"
+                    className="w-full min-h-[48px] px-3 py-2.5 rounded-xl bg-[#FAF6F0] hover:bg-[#F3E8D8] border border-[#E6D6C1] flex items-center justify-between gap-2 text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
                   >
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
@@ -142,28 +145,28 @@ export const MobileBottomNav: React.FC = () => {
                           {item.label}
                         </span>
                         {item.badge && (
-                          <span className="px-2 py-0.5 rounded-full bg-[#7A0915] text-white text-[9px] font-bold shrink-0">
+                          <span className="px-2 py-0.5 rounded-full bg-[#6B0812] text-white text-[10px] font-bold shrink-0">
                             {item.badge}
                           </span>
                         )}
                       </div>
-                      <p className="text-[10.5px] text-[#6E5048] mt-0.5 truncate">
+                      <p className="text-[11px] text-[#523A35] mt-0.5 truncate">
                         {item.sub}
                       </p>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-[#7A0915] shrink-0" />
+                    <ChevronRight className="w-4 h-4 text-[#6B0812] shrink-0" />
                   </button>
                 ))}
               </div>
 
               {/* Bottom Quick Action Buttons in Sheet */}
-              <div className="grid grid-cols-3 gap-1.5 pt-1.5 border-t border-[#EFE4D4]">
+              <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-[#EFE4D4]">
                 <button
                   type="button"
                   onClick={() =>
                     handleNavClick(() => navigateTo('shop', { width: 'all' }))
                   }
-                  className="py-2 px-2 rounded-xl bg-[#7A0915] text-white text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer"
+                  className="min-h-[40px] py-2 px-2 rounded-xl bg-[#6B0812] text-white text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer"
                 >
                   <ShoppingBag className="w-3.5 h-3.5 shrink-0" />
                   <span>সকল কাপড়</span>
@@ -171,7 +174,7 @@ export const MobileBottomNav: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleNavClick(() => navigateTo('calculator'))}
-                  className="py-2 px-2 rounded-xl bg-[#FAF3E8] border border-[#DFC9AA] text-[#6B0812] text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer"
+                  className="min-h-[40px] py-2 px-2 rounded-xl bg-[#FAF3E8] border border-[#DFC9AA] text-[#6B0812] text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer"
                 >
                   <Calculator className="w-3.5 h-3.5 shrink-0" />
                   <span>গজ হিসাব</span>
@@ -181,7 +184,7 @@ export const MobileBottomNav: React.FC = () => {
                   onClick={() =>
                     handleNavClick(() => navigateTo('custom-design'))
                   }
-                  className="py-2 px-2 rounded-xl bg-[#FAF3E8] border border-[#DFC9AA] text-[#6B0812] text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer"
+                  className="min-h-[40px] py-2 px-2 rounded-xl bg-[#FAF3E8] border border-[#DFC9AA] text-[#6B0812] text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer"
                 >
                   <Sparkles className="w-3.5 h-3.5 shrink-0" />
                   <span>কাস্টম অর্ডার</span>
@@ -192,30 +195,30 @@ export const MobileBottomNav: React.FC = () => {
         </div>
       )}
 
-      {/* Fixed Bottom Navigation Bar (Mobile Only — Matches Reference image_107595c3.png & Blends Seamlessly with Website #FAF6F0 Background) */}
+      {/* Fixed Bottom Navigation Bar (Mobile Only — Warm Liquid Glass with Safe Area) */}
       <nav
         aria-label="মোবাইল বটম নেভিগেশন"
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#FAF6F0] border-t border-[#E6D8C5] shadow-[0_-6px_22px_rgba(120,12,20,0.10)] select-none"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 glass-functional border-t border-[#DFCBB2]/90 shadow-[0_-8px_28px_rgba(36,22,20,0.12)] select-none pb-[env(safe-area-inset-bottom)]"
       >
-        <div className="relative max-w-md mx-auto px-2 pt-2 pb-2">
+        <div className="relative max-w-md mx-auto px-2 pt-1.5 pb-2">
           <div className="grid grid-cols-5 items-center">
             {/* 1. হোম (Home) */}
             <button
               type="button"
               onClick={() => handleNavClick(() => navigateTo('home'))}
-              className="flex flex-col items-center justify-center gap-1 py-0.5 cursor-pointer group"
+              className="min-h-[44px] flex flex-col items-center justify-center gap-1 py-0.5 cursor-pointer group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
             >
-              <div className="relative flex items-center justify-center h-7">
+              <div className="relative flex items-center justify-center h-6">
                 <svg
-                  className={`w-[24px] h-[24px] transition-colors ${
+                  className={`w-[22px] h-[22px] transition-colors ${
                     isHomeActive
-                      ? 'text-[#9E0B16]'
-                      : 'text-[#3D1410] group-hover:text-[#9E0B16]'
+                      ? 'text-[#6B0812]'
+                      : 'text-[#3D1410] group-hover:text-[#6B0812]'
                   }`}
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="2.2"
+                  strokeWidth="2.1"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
@@ -225,8 +228,8 @@ export const MobileBottomNav: React.FC = () => {
                 </svg>
               </div>
               <span
-                className={`text-[11.5px] leading-none tracking-tight font-extrabold ${
-                  isHomeActive ? 'text-[#9E0B16]' : 'text-[#3D1410]'
+                className={`text-[11px] leading-none tracking-tight font-extrabold ${
+                  isHomeActive ? 'text-[#6B0812]' : 'text-[#3D1410]'
                 }`}
               >
                 হোম
@@ -237,19 +240,19 @@ export const MobileBottomNav: React.FC = () => {
             <button
               type="button"
               onClick={() => setCategorySheetOpen((prev) => !prev)}
-              className="flex flex-col items-center justify-center gap-1 py-0.5 cursor-pointer group"
+              className="min-h-[44px] flex flex-col items-center justify-center gap-1 py-0.5 cursor-pointer group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
             >
-              <div className="relative flex items-center justify-center h-7">
+              <div className="relative flex items-center justify-center h-6">
                 <svg
-                  className={`w-[23px] h-[23px] transition-colors ${
+                  className={`w-[21px] h-[21px] transition-colors ${
                     isCategoryActive
-                      ? 'text-[#9E0B16]'
-                      : 'text-[#3D1410] group-hover:text-[#9E0B16]'
+                      ? 'text-[#6B0812]'
+                      : 'text-[#3D1410] group-hover:text-[#6B0812]'
                   }`}
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="2.2"
+                  strokeWidth="2.1"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
@@ -260,32 +263,32 @@ export const MobileBottomNav: React.FC = () => {
                 </svg>
               </div>
               <span
-                className={`text-[11.5px] leading-none tracking-tight font-extrabold ${
-                  isCategoryActive ? 'text-[#9E0B16]' : 'text-[#3D1410]'
+                className={`text-[11px] leading-none tracking-tight font-extrabold ${
+                  isCategoryActive ? 'text-[#6B0812]' : 'text-[#3D1410]'
                 }`}
               >
                 ক্যাটাগরি
               </span>
             </button>
 
-            {/* 3. কার্ট (Elevated Center Crimson Circle with Gold Rim & Gold Count Badge) */}
+            {/* 3. কার্ট (Elevated Center Crimson Medallion with Zari Gold Rim) */}
             <div className="relative flex items-center justify-center">
               <button
                 type="button"
                 onClick={() => handleNavClick(() => navigateTo('cart'))}
                 aria-label="শপিং কার্ট"
-                className={`-mt-7 -mb-2.5 w-[70px] h-[70px] rounded-full p-[3.5px] bg-gradient-to-b from-[#FCE8BA] via-[#F2C777] to-[#E2AD52] shadow-[0_6px_18px_rgba(145,10,20,0.32)] active:scale-95 transition-transform cursor-pointer flex items-center justify-center ${
-                  isCartActive ? 'ring-2 ring-[#9E0B16]/30' : ''
+                className={`-mt-6 -mb-1.5 w-[64px] h-[64px] rounded-full p-[3px] bg-gradient-to-b from-[#F5DDA7] via-[#DFB464] to-[#C5933B] shadow-[0_8px_20px_rgba(107,8,18,0.28)] active:scale-95 transition-transform cursor-pointer flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] ${
+                  isCartActive ? 'ring-2 ring-[#6B0812]/35' : ''
                 }`}
               >
-                <div className="w-full h-full rounded-full bg-gradient-to-b from-[#C90D1B] via-[#9D0813] to-[#6E040C] border border-[#FFF3D6]/60 flex flex-col items-center justify-center pt-1">
+                <div className="w-full h-full rounded-full bg-gradient-to-b from-[#8A0B17] via-[#6B0812] to-[#4E050C] border border-[#FFF3D6]/50 flex flex-col items-center justify-center pt-0.5">
                   <div className="relative flex items-center justify-center">
                     <svg
-                      className="w-[26px] h-[26px] text-white -ml-1"
+                      className="w-[23px] h-[23px] text-white -ml-0.5"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
-                      strokeWidth="2.2"
+                      strokeWidth="2.1"
                       strokeLinecap="round"
                       strokeLinejoin="round"
                     >
@@ -294,79 +297,75 @@ export const MobileBottomNav: React.FC = () => {
                       <path d="M2.5 4h2.6l2.1 10.5a1.6 1.6 0 0 0 1.6 1.3h8.4a1.6 1.6 0 0 0 1.55-1.2L20.5 7H6" />
                     </svg>
 
-                    {/* Golden Circular Count Badge */}
-                    <span className="absolute -top-2 -right-3 min-w-[20px] h-[20px] px-1 rounded-full bg-gradient-to-b from-[#FFE39F] via-[#F5C66B] to-[#E5AC46] border border-[#FFF6DE] text-[#7D060F] text-[11px] font-extrabold flex items-center justify-center leading-none tabular-nums shadow-xs">
+                    <span className="absolute -top-2 -right-3 min-w-[19px] h-[19px] px-1 rounded-full bg-[#F5DDA7] border border-[#FFFDF9] text-[#6B0812] text-[10.5px] font-extrabold flex items-center justify-center leading-none tabular-nums shadow-xs">
                       {cartItemCount}
                     </span>
                   </div>
 
-                  <span className="text-white text-[12px] font-extrabold leading-none mt-1 tracking-tight">
+                  <span className="text-white text-[11px] font-extrabold leading-none mt-1 tracking-tight">
                     কার্ট
                   </span>
                 </div>
               </button>
             </div>
 
-            {/* 4. অর্ডার ট্র্যাকিং (Order Tracking — 3D Box + Crimson Pin) */}
+            {/* 4. অর্ডার ট্র্যাকিং */}
             <button
               type="button"
               onClick={() => handleNavClick(() => navigateTo('order-tracking'))}
-              className="flex flex-col items-center justify-center gap-1 py-0.5 cursor-pointer group"
+              className="min-h-[44px] flex flex-col items-center justify-center gap-1 py-0.5 cursor-pointer group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
             >
-              <div className="relative flex items-center justify-center h-7">
+              <div className="relative flex items-center justify-center h-6">
                 <svg
-                  className="w-[26px] h-[26px]"
+                  className="w-[24px] h-[24px]"
                   viewBox="0 0 26 26"
                   fill="none"
                   xmlns="http://www.w3.org/2000/svg"
                 >
-                  {/* Isometric 3D Parcel Cube */}
                   <path
                     d="M12 2.8L3.8 7.2V16.8L12 21.2L16.5 18.8"
-                    stroke={isTrackingActive ? '#9E0B16' : '#3D1410'}
-                    strokeWidth="2.1"
+                    stroke={isTrackingActive ? '#6B0812' : '#3D1410'}
+                    strokeWidth="2.0"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
                   <path
                     d="M12 2.8L20.2 7.2V11.5"
-                    stroke={isTrackingActive ? '#9E0B16' : '#3D1410'}
-                    strokeWidth="2.1"
+                    stroke={isTrackingActive ? '#6B0812' : '#3D1410'}
+                    strokeWidth="2.0"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
                   <path
                     d="M3.8 7.2L12 11.6L20.2 7.2"
-                    stroke={isTrackingActive ? '#9E0B16' : '#3D1410'}
-                    strokeWidth="2.1"
+                    stroke={isTrackingActive ? '#6B0812' : '#3D1410'}
+                    strokeWidth="2.0"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
                   <path
                     d="M12 11.6V21.2"
-                    stroke={isTrackingActive ? '#9E0B16' : '#3D1410'}
-                    strokeWidth="2.1"
+                    stroke={isTrackingActive ? '#6B0812' : '#3D1410'}
+                    strokeWidth="2.0"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
-                  {/* Small Center Dot on Top Flap */}
                   <circle
                     cx="12"
                     cy="7.1"
                     r="1.15"
-                    fill={isTrackingActive ? '#9E0B16' : '#3D1410'}
+                    fill={isTrackingActive ? '#6B0812' : '#3D1410'}
                   />
-                  {/* Crimson Location Pin at Bottom-Right */}
                   <path
                     d="M19.2 12.2C16.88 12.2 15 14.05 15 16.33C15 19.35 19.2 23.4 19.2 23.4C19.2 23.4 23.4 19.35 23.4 16.33C23.4 14.05 21.52 12.2 19.2 12.2Z"
-                    fill="#A50C17"
+                    fill="#6B0812"
                   />
-                  <circle cx="19.2" cy="16.2" r="1.7" fill="#FDF8F1" />
+                  <circle cx="19.2" cy="16.2" r="1.7" fill="#FAF6F0" />
                 </svg>
               </div>
               <span
-                className={`text-[10.5px] min-[380px]:text-[11px] leading-none tracking-tight font-extrabold whitespace-nowrap ${
-                  isTrackingActive ? 'text-[#9E0B16]' : 'text-[#3D1410]'
+                className={`text-[11px] leading-none tracking-tight font-extrabold whitespace-nowrap ${
+                  isTrackingActive ? 'text-[#6B0812]' : 'text-[#3D1410]'
                 }`}
               >
                 অর্ডার ট্র্যাকিং
@@ -377,19 +376,19 @@ export const MobileBottomNav: React.FC = () => {
             <button
               type="button"
               onClick={() => handleNavClick(() => navigateTo('account'))}
-              className="flex flex-col items-center justify-center gap-1 py-0.5 cursor-pointer group"
+              className="min-h-[44px] flex flex-col items-center justify-center gap-1 py-0.5 cursor-pointer group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
             >
-              <div className="relative flex items-center justify-center h-7">
+              <div className="relative flex items-center justify-center h-6">
                 <svg
-                  className={`w-[24px] h-[24px] transition-colors ${
+                  className={`w-[22px] h-[22px] transition-colors ${
                     isAccountActive
-                      ? 'text-[#9E0B16]'
-                      : 'text-[#3D1410] group-hover:text-[#9E0B16]'
+                      ? 'text-[#6B0812]'
+                      : 'text-[#3D1410] group-hover:text-[#6B0812]'
                   }`}
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="2.2"
+                  strokeWidth="2.1"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
@@ -398,8 +397,8 @@ export const MobileBottomNav: React.FC = () => {
                 </svg>
               </div>
               <span
-                className={`text-[11px] min-[380px]:text-[11.5px] leading-none tracking-tight font-extrabold whitespace-nowrap ${
-                  isAccountActive ? 'text-[#9E0B16]' : 'text-[#3D1410]'
+                className={`text-[11px] leading-none tracking-tight font-extrabold whitespace-nowrap ${
+                  isAccountActive ? 'text-[#6B0812]' : 'text-[#3D1410]'
                 }`}
               >
                 অ্যাকাউন্ট

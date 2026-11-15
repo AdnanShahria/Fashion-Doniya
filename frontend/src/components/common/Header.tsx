@@ -37,7 +37,17 @@ export const Header: React.FC = () => {
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [lang, setLang] = useAppLanguage();
   const [searchInput, setSearchInput] = useState(searchQuery || '');
+  const [isScrolled, setIsScrolled] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onScroll = () => {
+      setIsScrolled(window.scrollY > 12);
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -52,8 +62,19 @@ export const Header: React.FC = () => {
         setCategoryDropdownOpen(false);
       }
     };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setCategoryDropdownOpen(false);
+        setMobileMenuOpen(false);
+        setMobileSearchOpen(false);
+      }
+    };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
   }, []);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -425,7 +446,13 @@ export const Header: React.FC = () => {
   );
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-[#FDFBF7]/95 backdrop-blur-md border-b border-[#E6D9C8]">
+    <header
+      className={`sticky top-0 z-40 w-full glass-functional border-b transition-shadow duration-300 ${
+        isScrolled
+          ? 'border-[#DFCBB2]/90 shadow-[0_10px_28px_-14px_rgba(36,22,20,0.16)]'
+          : 'border-[#E6D9C8]/85'
+      }`}
+    >
       <div className="max-w-[1400px] mx-auto px-2.5 sm:px-6 lg:px-8">
         {/* TOP ROW: Brand Logo + Lockup, Desktop Search Bar & Action Icons */}
         <div className="py-2 sm:py-3.5 flex items-center justify-between gap-2 sm:gap-4 lg:gap-6">
@@ -434,16 +461,16 @@ export const Header: React.FC = () => {
             <button
               type="button"
               onClick={() => navigateTo('home')}
-              className="text-left group cursor-pointer focus:outline-hidden min-w-0"
+              className="text-left group cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] focus-visible:ring-offset-2 min-w-0"
             >
               <div className="min-w-0">
                 <div className="font-['Playfair_Display'] text-[18px] sm:text-[28px] lg:text-[30px] font-bold tracking-tight leading-none whitespace-nowrap flex items-baseline">
                   <span className="text-[#6B0812]">Fashion</span>
-                  <span className="relative inline-block font-['Great_Vibes'] font-normal text-[23px] sm:text-[35px] lg:text-[38px] text-[#A84A50] mx-1 sm:mx-1.5 leading-none tracking-normal">
+                  <span className="relative inline-block font-['Great_Vibes'] font-normal text-[23px] sm:text-[35px] lg:text-[38px] text-[#9E3D43] mx-1 sm:mx-1.5 leading-none tracking-normal">
                     Doniya
                     {/* Curved calligraphic underline swash */}
                     <svg
-                      className="absolute left-[22%] bottom-[1px] sm:bottom-[2px] w-[52%] h-[5px] sm:h-[7px] text-[#A84A50] pointer-events-none"
+                      className="absolute left-[22%] bottom-[1px] sm:bottom-[2px] w-[52%] h-[5px] sm:h-[7px] text-[#9E3D43] pointer-events-none"
                       viewBox="0 0 80 12"
                       fill="none"
                       xmlns="http://www.w3.org/2000/svg"
@@ -455,9 +482,9 @@ export const Header: React.FC = () => {
                       />
                     </svg>
                   </span>
-                  <span className="text-[#C58B1E]">BD</span>
+                  <span className="text-[#9E690C]">BD</span>
                 </div>
-                <p className="text-[9.5px] sm:text-[12.5px] font-medium text-[#7A5448] mt-0.5 sm:mt-1 tracking-normal text-left whitespace-nowrap">
+                <p className="text-[10px] sm:text-[12.5px] font-medium text-[#5E4037] mt-0.5 sm:mt-1 tracking-normal text-left whitespace-nowrap">
                   প্রিমিয়াম কাপড়, এখন গজ হিসেবে
                 </p>
               </div>
@@ -467,20 +494,31 @@ export const Header: React.FC = () => {
           {/* Center: Clean Search Bar (Tablet & Desktop) */}
           <form
             onSubmit={handleSearchSubmit}
-            className="hidden md:flex flex-1 max-w-xl items-center bg-[#FFFDF9] border border-[#E5D7C4] rounded-full pl-4 pr-1.5 py-1 focus-within:border-[#C58B1E] transition-colors"
+            className="hidden md:flex flex-1 max-w-xl items-center bg-[#FFFDF9]/95 border border-[#DFCBB2] rounded-full pl-4 pr-1.5 py-1 shadow-[inset_0_1px_2px_rgba(36,22,20,0.04)] focus-within:border-[#8A5A10] focus-within:ring-2 focus-within:ring-[#C59B48]/25 transition-all"
           >
-            <Search className="w-4 h-4 text-[#6B0812]/70 shrink-0 mr-2.5" />
+            <Search className="w-4 h-4 text-[#6B0812]/75 shrink-0 mr-2.5" />
             <input
               type="text"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="কাপড়ের নাম, ডিজাইন বা ক্যাটাগরি খুঁজুন..."
-              className="w-full bg-transparent text-sm text-[#2E1A18] placeholder-[#7A625A] focus:outline-hidden"
+              aria-label="কাপড় খুঁজুন"
+              className="w-full bg-transparent text-sm text-[#241614] placeholder-[#6E5750] focus:outline-none"
             />
+            {searchInput && (
+              <button
+                type="button"
+                onClick={() => setSearchInput('')}
+                aria-label="সার্চ মুছুন"
+                className="w-7 h-7 rounded-full text-[#6E5750] hover:text-[#6B0812] hover:bg-[#FAF6F0] flex items-center justify-center mr-1 transition-colors cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
             <button
               type="submit"
               aria-label="খুঁজুন"
-              className="w-8 h-8 rounded-full bg-[#6B0812] hover:bg-[#56060E] text-white flex items-center justify-center shrink-0 transition-colors cursor-pointer"
+              className="w-8 h-8 rounded-full bg-[#6B0812] hover:bg-[#53050D] active:scale-95 text-white flex items-center justify-center shrink-0 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
             >
               <Search className="w-3.5 h-3.5" />
             </button>
@@ -495,12 +533,12 @@ export const Header: React.FC = () => {
                 setMobileSearchOpen(!mobileSearchOpen);
                 if (!mobileSearchOpen) setMobileMenuOpen(false);
               }}
-              className="md:hidden h-8 px-2.5 rounded-full bg-[#FFFDF9] border border-[#E5D7C4] hover:border-[#C58B1E] flex items-center gap-1 text-[#6B0812] text-[11px] font-medium transition-colors cursor-pointer shrink-0"
+              className="md:hidden h-9 px-2.5 rounded-full bg-[#FFFDF9]/90 border border-[#DFCBB2] hover:border-[#8A5A10] flex items-center gap-1.5 text-[#6B0812] text-xs font-semibold transition-all active:scale-95 cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
               aria-label="কাপড় খুঁজুন"
               title="খুঁজুন"
             >
               <Search className="w-3.5 h-3.5 stroke-[2]" />
-              <span className="hidden xs:inline text-[#7A625A]">খুঁজুন</span>
+              <span className="hidden xs:inline text-[#5E4037]">খুঁজুন</span>
             </button>
 
             {/* Language Switcher (Desktop XL) */}
@@ -508,15 +546,15 @@ export const Header: React.FC = () => {
               type="button"
               data-no-translate="true"
               onClick={() => setLang(lang === 'BN' ? 'EN' : 'BN')}
-              className="hidden xl:flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-[#FFFDF9] border border-[#E5D7C4] text-xs font-semibold text-[#5C0811] hover:border-[#C58B1E] transition-colors cursor-pointer whitespace-nowrap"
+              className="hidden xl:flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-[#FFFDF9]/90 border border-[#DFCBB2] text-xs font-semibold text-[#5C0811] hover:border-[#8A5A10] hover:bg-[#FFFDF9] transition-all cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
               title="ভাষা পরিবর্তন / Switch Language"
             >
               <Globe className="w-3.5 h-3.5 text-[#6B0812]" />
-              <span className={lang === 'BN' ? 'text-[#6B0812] font-bold' : 'text-[#2E1A18]/60'}>
+              <span className={lang === 'BN' ? 'text-[#6B0812] font-bold' : 'text-[#5E4037]'}>
                 বাংলা
               </span>
               <span className="text-[#D4C5B4]">|</span>
-              <span className={lang === 'EN' ? 'text-[#6B0812] font-bold' : 'text-[#2E1A18]/60'}>
+              <span className={lang === 'EN' ? 'text-[#6B0812] font-bold' : 'text-[#5E4037]'}>
                 EN
               </span>
             </button>
@@ -525,7 +563,7 @@ export const Header: React.FC = () => {
             <button
               type="button"
               onClick={() => navigateTo('account')}
-              className="hidden sm:flex sm:w-auto sm:h-auto sm:px-3.5 sm:py-2 rounded-full bg-[#FFFDF9] border border-[#E5D7C4] hover:border-[#C58B1E] text-[13px] font-semibold text-[#2E1A18] items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+              className="hidden sm:flex sm:w-auto sm:h-9 sm:px-3.5 rounded-full bg-[#FFFDF9]/90 border border-[#DFCBB2] hover:border-[#8A5A10] hover:bg-[#FFFDF9] text-[13px] font-semibold text-[#241614] items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
               title="কাস্টমার অ্যাকাউন্ট"
               aria-label="কাস্টমার অ্যাকাউন্ট"
             >
@@ -539,24 +577,24 @@ export const Header: React.FC = () => {
             <button
               type="button"
               onClick={() => navigateTo('wishlist')}
-              className="w-8 h-8 sm:w-auto sm:h-auto sm:px-3.5 sm:py-2 rounded-full bg-[#FFFDF9] border border-[#E5D7C4] hover:border-[#C58B1E] text-xs sm:text-[13px] font-semibold text-[#2E1A18] flex items-center justify-center gap-1.5 transition-colors relative cursor-pointer whitespace-nowrap shrink-0"
+              className="w-9 h-9 sm:w-auto sm:h-9 sm:px-3.5 rounded-full bg-[#FFFDF9]/90 border border-[#DFCBB2] hover:border-[#8A5A10] hover:bg-[#FFFDF9] text-xs sm:text-[13px] font-semibold text-[#241614] flex items-center justify-center gap-1.5 transition-all active:scale-95 relative cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
               title="উইশলিস্ট"
               aria-label="উইশলিস্ট"
             >
-              <Heart className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#6B0812] stroke-[2]" />
+              <Heart className="w-4 h-4 text-[#6B0812] stroke-[2]" />
               <span className="hidden sm:inline">উইশলিস্ট</span>
               {wishlist.length > 0 && (
-                <span className="absolute -top-1 -right-1 sm:static sm:ml-0.5 min-w-[15px] h-[15px] px-1 bg-[#6B0812] text-white text-[9px] font-bold rounded-full flex items-center justify-center tabular-nums">
+                <span className="absolute -top-1 -right-1 sm:static sm:ml-0.5 min-w-[17px] h-[17px] px-1 bg-[#6B0812] text-white text-[10px] font-bold rounded-full flex items-center justify-center tabular-nums">
                   {wishlist.length}
                 </span>
               )}
             </button>
 
-            {/* Shopping Cart Pill Button (Matches Laptop Style) */}
+            {/* Shopping Cart Pill Button (Primary Prominent Header Action) */}
             <button
               type="button"
               onClick={() => navigateTo('cart')}
-              className="h-8 sm:h-auto px-3 sm:px-4 sm:py-2 rounded-full bg-[#6B0812] hover:bg-[#56060E] text-white text-[11.5px] sm:text-[13.5px] font-semibold flex items-center justify-center gap-1 sm:gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 shadow-2xs"
+              className="h-9 px-3.5 sm:px-4 rounded-full bg-[#6B0812] hover:bg-[#53050D] active:scale-[0.98] text-white text-xs sm:text-[13.5px] font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-[0_4px_12px_rgba(107,8,18,0.22),inset_0_1px_0_rgba(255,255,255,0.16)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] focus-visible:ring-offset-2"
               title="শপিং কার্ট"
               aria-label="শপিং কার্ট"
             >
@@ -566,25 +604,30 @@ export const Header: React.FC = () => {
           </div>
         </div>
 
-        {/* MOBILE & TABLET NAVIGATION ROW (Laptop-Style "সকল ক্যাটাগরি" Pill + Clean Nav Links) */}
-        <div className="lg:hidden flex items-center gap-3.5 py-2 border-t border-[#EFE4D4] overflow-x-auto no-scrollbar">
+        {/* MOBILE & TABLET NAVIGATION ROW */}
+        <div className="lg:hidden flex items-center gap-3.5 py-2 border-t border-[#EFE4D4]/80 overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="px-3 py-1 rounded-full bg-[#6B0812] text-white text-[11px] font-semibold flex items-center gap-1.5 shrink-0 cursor-pointer"
+            aria-expanded={mobileMenuOpen}
+            className="min-h-[32px] px-3 py-1 rounded-full bg-[#6B0812] text-white text-[11.5px] font-semibold flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
           >
-            <List className="w-3 h-3" />
+            <List className="w-3.5 h-3.5" />
             <span>সকল ক্যাটাগরি</span>
-            <ChevronDown className="w-3 h-3" />
+            <ChevronDown
+              className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                mobileMenuOpen ? 'rotate-180' : ''
+              }`}
+            />
           </button>
 
-          <nav className="flex items-center gap-4 text-[12px] font-semibold shrink-0 pr-2">
+          <nav aria-label="প্রধান নেভিগেশন" className="flex items-center gap-4 text-[12px] font-semibold shrink-0 pr-2">
             {mainNavLinks.map((link) => (
               <button
                 key={link.label}
                 type="button"
                 onClick={link.onClick}
-                className={`relative py-1 flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap ${
+                className={`relative py-1.5 flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] rounded-md ${
                   link.isActive
                     ? 'text-[#6B0812] font-bold'
                     : 'text-[#241614] hover:text-[#6B0812]'
@@ -605,7 +648,7 @@ export const Header: React.FC = () => {
           <div className="md:hidden pb-2.5 pt-0.5">
             <form
               onSubmit={handleSearchSubmit}
-              className="flex items-center bg-[#FFFDF9] border border-[#D8C5AE] focus-within:border-[#6B0812] rounded-lg pl-3 pr-1 py-1"
+              className="flex items-center bg-[#FFFDF9] border border-[#D8C5AE] focus-within:border-[#6B0812] focus-within:ring-2 focus-within:ring-[#C59B48]/25 rounded-full pl-3.5 pr-1 py-1"
             >
               <Search className="w-3.5 h-3.5 text-[#6B0812] shrink-0 mr-2" />
               <input
@@ -614,13 +657,13 @@ export const Header: React.FC = () => {
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="কাপড়ের নাম, ডিজাইন বা ক্যাটাগরি খুঁজুন..."
                 autoFocus
-                className="w-full bg-transparent text-xs text-[#2E1A18] placeholder-[#7A625A] focus:outline-hidden"
+                className="w-full bg-transparent text-xs text-[#241614] placeholder-[#6E5750] focus:outline-none"
               />
               {searchInput && (
                 <button
                   type="button"
                   onClick={() => setSearchInput('')}
-                  className="p-1 text-[#7A625A] hover:text-[#6B0812]"
+                  className="p-1.5 text-[#6E5750] hover:text-[#6B0812] cursor-pointer"
                   aria-label="মুছুন"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -628,7 +671,7 @@ export const Header: React.FC = () => {
               )}
               <button
                 type="submit"
-                className="px-2.5 py-1 rounded-md bg-[#6B0812] text-white text-[11px] font-medium shrink-0 ml-1"
+                className="px-3 py-1.5 rounded-full bg-[#6B0812] text-white text-xs font-semibold shrink-0 ml-1 cursor-pointer"
               >
                 খুঁজুন
               </button>
@@ -637,13 +680,14 @@ export const Header: React.FC = () => {
         )}
 
         {/* SECOND ROW: All Categories Dropdown + Category Navigation Links (Desktop) */}
-        <div className="hidden lg:flex items-center justify-between gap-6 py-2.5 border-t border-[#EFE4D4]">
+        <div className="hidden lg:flex items-center justify-between gap-6 py-2.5 border-t border-[#EFE4D4]/80">
           {/* Left: সকল ক্যাটাগরি Dropdown */}
           <div className="relative shrink-0" ref={dropdownRef}>
             <button
               type="button"
               onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
-              className="px-5 py-2 rounded-full bg-[#6B0812] hover:bg-[#56060E] text-white text-sm font-semibold flex items-center gap-2.5 transition-colors cursor-pointer whitespace-nowrap"
+              aria-expanded={categoryDropdownOpen}
+              className="px-5 py-2 rounded-full bg-[#6B0812] hover:bg-[#53050D] active:scale-[0.98] text-white text-sm font-semibold flex items-center gap-2.5 transition-all cursor-pointer whitespace-nowrap shadow-[0_3px_10px_rgba(107,8,18,0.18),inset_0_1px_0_rgba(255,255,255,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] focus-visible:ring-offset-2"
             >
               <List className="w-4 h-4" />
               <span>সকল ক্যাটাগরি</span>
@@ -655,20 +699,20 @@ export const Header: React.FC = () => {
             </button>
 
             {categoryDropdownOpen && (
-              <div className="absolute left-0 mt-2.5 w-[350px] bg-[#FAF6F0] rounded-2xl shadow-[0_14px_34px_-8px_rgba(107,8,18,0.18)] border border-[#E6D6C1] p-3.5 z-50">
+              <div className="absolute left-0 mt-2.5 w-[356px] bg-[#FFFDF9]/98 backdrop-blur-xl rounded-2xl shadow-[0_18px_42px_-10px_rgba(36,22,20,0.22)] border border-[#E6D6C1] p-3.5 z-50">
                 {renderCategorySectionMenu(() => setCategoryDropdownOpen(false))}
               </div>
             )}
           </div>
 
           {/* Right/Center Navigation Links */}
-          <nav className="flex items-center justify-between flex-1 max-w-4xl text-[15px] font-semibold">
+          <nav aria-label="প্রধান নেভিগেশন" className="flex items-center justify-between flex-1 max-w-4xl text-[15px] font-semibold">
             {mainNavLinks.map((link) => (
               <button
                 key={link.label}
                 type="button"
                 onClick={link.onClick}
-                className={`relative py-1.5 px-1 flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                className={`relative py-1.5 px-1.5 flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] ${
                   link.isActive
                     ? 'text-[#6B0812] font-bold'
                     : 'text-[#241614] hover:text-[#6B0812]'
@@ -677,7 +721,7 @@ export const Header: React.FC = () => {
                 {link.isHome && <Home className="w-4 h-4 text-[#6B0812]" />}
                 <span>{link.label}</span>
                 {link.isActive && (
-                  <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#6B0812] rounded-full" />
+                  <span className="absolute bottom-0 left-1 right-1 h-[2px] bg-[#6B0812] rounded-full" />
                 )}
               </button>
             ))}
@@ -687,7 +731,7 @@ export const Header: React.FC = () => {
 
       {/* Mobile & Tablet Full-Page Category View */}
       {mobileMenuOpen && (
-        <div className="lg:hidden bg-[#FDFBF7] border-t border-[#EFE4D4] px-3.5 pt-4 pb-28 min-h-[calc(100dvh-82px)] overflow-y-auto">
+        <div className="lg:hidden bg-[#FAF6F0]/98 backdrop-blur-xl border-t border-[#EFE4D4] px-3.5 pt-4 pb-28 min-h-[calc(100dvh-82px)] overflow-y-auto">
           {renderCategorySectionMenu(() => setMobileMenuOpen(false))}
         </div>
       )}

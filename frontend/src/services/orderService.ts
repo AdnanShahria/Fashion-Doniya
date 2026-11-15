@@ -852,5 +852,20 @@ export const orderService = {
         broadcastChannel.removeEventListener('message', handleBroadcast);
       }
     };
+  },
+
+  deleteOrder(orderId: string): boolean {
+    StorageService.initialize();
+    const rawOrders = StorageService.getRawOrders();
+    const filtered = rawOrders.filter(
+      (o) => o.id !== orderId && o.orderNumber.toUpperCase() !== orderId.toUpperCase()
+    );
+    if (filtered.length !== rawOrders.length) {
+      StorageService.setOrders(filtered);
+      notifyLocalOrderSubscribers(null as unknown as Order);
+      api.delete(`/admin/orders/${encodeURIComponent(orderId)}`).catch(() => {});
+      return true;
+    }
+    return false;
   }
 };

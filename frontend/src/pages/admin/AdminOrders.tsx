@@ -25,7 +25,8 @@ import {
   FileText,
   XCircle,
   Send,
-  Scissors
+  Scissors,
+  Trash2
 } from 'lucide-react';
 
 const ALL_STATUSES: OrderStatus[] = [
@@ -250,6 +251,15 @@ export const AdminOrders: React.FC = () => {
     orderService.updatePaymentStatus(orderId, paymentStatus);
     reloadOrders();
     showToast(`পেমেন্ট স্ট্যাটাস পরিবর্তিত: ${paymentStatus}`, 'success');
+  };
+
+  const handleDeleteOrder = (order: Order) => {
+    if (window.confirm(`আপনি কি নিশ্চিত যে অর্ডার "${order.orderNumber}" মুছে ফেলতে চান? এটি ডাটাবেস থেকেও স্থায়ীভাবে মুছে যাবে।`)) {
+      orderService.deleteOrder(order.id);
+      setSelectedOrder(null);
+      reloadOrders();
+      showToast(`অর্ডার ${order.orderNumber} সফলভাবে মুছে ফেলা হয়েছে`, 'info');
+    }
   };
 
   const handleExportCSV = () => {
@@ -629,14 +639,24 @@ export const AdminOrders: React.FC = () => {
                       </td>
 
                       <td className="p-3 text-right">
-                        <button
-                          onClick={() => openOrderModal(order)}
-                          className="px-2.5 py-1.5 bg-[#242424] hover:bg-[#C5A46D] text-white rounded-md transition-colors inline-flex items-center gap-1 cursor-pointer text-[11px] font-semibold"
-                          title="ট্র্যাকিং ও কুরিয়ার ম্যানেজ করুন"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>ম্যানেজ</span>
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => openOrderModal(order)}
+                            className="px-2.5 py-1.5 bg-[#242424] hover:bg-[#C5A46D] text-white rounded-md transition-colors inline-flex items-center gap-1 cursor-pointer text-[11px] font-semibold"
+                            title="ট্র্যাকিং ও কুরিয়ার ম্যানেজ করুন"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>ম্যানেজ</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteOrder(order)}
+                            className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-md transition-colors inline-flex items-center justify-center cursor-pointer"
+                            title="অর্ডার মুছুন"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1246,17 +1266,28 @@ export const AdminOrders: React.FC = () => {
 
             {/* Modal Footer Actions */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[#EDE5D9]">
-              <button
-                onClick={() => {
-                  setLastCompletedOrder(selectedOrder);
-                  setSelectedOrder(null);
-                  navigateTo('order-confirmation');
-                }}
-                className="px-3.5 py-2 bg-[#FAF8F4] hover:bg-[#EDE5D9] text-[#242424] border border-[#EDE5D9] rounded-md text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
-              >
-                <Printer className="w-3.5 h-3.5 text-[#C5A46D]" />
-                <span>রশিদ / ইনভয়েস প্রিন্ট ভিউ</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setLastCompletedOrder(selectedOrder);
+                    setSelectedOrder(null);
+                    navigateTo('order-confirmation');
+                  }}
+                  className="px-3.5 py-2 bg-[#FAF8F4] hover:bg-[#EDE5D9] text-[#242424] border border-[#EDE5D9] rounded-md text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5 text-[#C5A46D]" />
+                  <span>রশিদ / ইনভয়েস প্রিন্ট ভিউ</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleDeleteOrder(selectedOrder)}
+                  className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-md text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>অর্ডার মুছুন</span>
+                </button>
+              </div>
 
               <button
                 onClick={() => setSelectedOrder(null)}

@@ -663,3 +663,27 @@ adminOrdersRouter.patch('/:id/payment', async (c) => {
     order: updated ? await hydrateOrderRow(db, updated) : null,
   });
 });
+
+adminOrdersRouter.delete('/:id', async (c) => {
+  const id = c.req.param('id');
+  const db = c.get('db');
+  const row = await findOrderByIdOrNumber(db, id);
+  if (!row) {
+    return c.json({ success: false, message: 'অর্ডারটি খুঁজে পাওয়া যায়নি।' }, 404);
+  }
+
+  await db.delete(orderItems).where(eq(orderItems.orderId, row.id));
+  await db.delete(trackings).where(eq(trackings.orderId, row.id));
+  await db.delete(courierInfo).where(eq(courierInfo.orderId, row.id));
+  await db.delete(orders).where(eq(orders.id, row.id));
+
+  await appendAdminLog(
+    db,
+    `অর্ডার মুছে ফেলা হয়েছে: ${row.orderNumber}`,
+    'order',
+    `গ্রাহক: ${row.customerName} (${row.customerPhone}) · মোট: ৳${row.grandTotal}`
+  );
+
+  clearBulkMicroCache();
+  return c.json({ success: true, message: `অর্ডার ${row.orderNumber} সফলভাবে মুছে ফেলা হয়েছে।` });
+});

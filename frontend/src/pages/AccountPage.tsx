@@ -94,7 +94,7 @@ export const AccountPage: React.FC = () => {
     : [];
 
   // Handle Login / Register / Forgot Password Submit
-  const handleAuthSubmit = (e: React.FormEvent) => {
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFeedback(null);
 
@@ -107,7 +107,7 @@ export const AccountPage: React.FC = () => {
         });
         return;
       }
-      const ok = resetPassword(resetPhone, newPassword);
+      const ok = await resetPassword(resetPhone, newPassword);
       if (!ok) {
         const normalized = StorageService.normalizePhone(resetPhone);
         const isValidPhone = /^01[3-9]\d{8}$/.test(normalized);
@@ -144,7 +144,7 @@ export const AccountPage: React.FC = () => {
         });
         return;
       }
-      const ok = registerUser(regName, regPhone, regPassword);
+      const ok = await registerUser(regName, regPhone, regPassword);
       if (!ok) {
         const normalized = StorageService.normalizePhone(regPhone);
         const isValidPhone = /^01[3-9]\d{8}$/.test(normalized);
@@ -164,7 +164,7 @@ export const AccountPage: React.FC = () => {
     }
 
     // 3. Login Flow
-    const ok = loginUser(loginPhone, loginPassword);
+    const ok = await loginUser(loginPhone, loginPassword);
     if (!ok) {
       const normalized = StorageService.normalizePhone(loginPhone);
       const isValidPhone = /^01[3-9]\d{8}$/.test(normalized);
@@ -209,10 +209,10 @@ export const AccountPage: React.FC = () => {
     });
   };
 
-  const handleProfilePasswordChange = (e: React.FormEvent) => {
+  const handleProfilePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
-    const ok = resetPassword(currentUser.phone, profileNewPassword);
+    const ok = await resetPassword(currentUser.phone, profileNewPassword);
     if (ok) {
       setProfileNewPassword('');
     }
