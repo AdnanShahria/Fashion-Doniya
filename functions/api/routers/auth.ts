@@ -10,6 +10,7 @@ import {
 } from '../utils/auth-helper';
 import { normalizePhone, safeJsonParse, appendAdminLog } from '../utils/helpers';
 import { sendTransactionalEmail } from '../utils/email';
+import { sendTransactionalSms } from '../utils/sms';
 import { authRateLimiter } from '../utils/rateLimiter';
 
 export const authRouter = new Hono<AppEnv>();
@@ -208,6 +209,11 @@ authRouter.post('/forgot-password', authRateLimiter, async (c) => {
       subject: 'Fashion Doniya BD — পাসওয়ার্ড রিসেট কোড (OTP)',
       html: `<p>আপনার পাসওয়ার্ড রিসেট ভেরিফিকেশন কোড: <strong>${code}</strong> (১৫ মিনিটের জন্য বৈধ)</p>`,
       text: `Your password reset code is: ${code}`,
+    });
+  } else {
+    await sendTransactionalSms(c.env, {
+      to: identifier,
+      message: `Fashion Doniya: আপনার পাসওয়ার্ড রিসেট ভেরিফিকেশন ওটিপি (OTP) হলো ${code}। মেয়াদ ১৫ মিনিট।`,
     });
   }
 

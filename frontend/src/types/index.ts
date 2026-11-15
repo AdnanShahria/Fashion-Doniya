@@ -459,6 +459,7 @@ export interface Order {
     fullName: string;
     phone: string;
     altPhone?: string;
+    email?: string;
     district: string;
     upazila: string;
     area: string;

@@ -3,6 +3,7 @@ import { desc, eq } from 'drizzle-orm';
 import type { AppEnv } from '../types';
 import { contactMessages, customDesignRequests } from '../../../backend/server/db/schemas/index';
 import { appendAdminLog, normalizePhone, safeJsonParse } from '../utils/helpers';
+import { sendTransactionalEmail } from '../utils/email';
 
 export const contentRouter = new Hono<AppEnv>();
 export const adminContentRouter = new Hono<AppEnv>();
@@ -35,6 +36,27 @@ contentRouter.post('/contact-messages', async (c) => {
     `ফোন: ${phone} · বার্তা: ${message.slice(0, 60)}`,
     'Customer'
   );
+
+  const adminEmail = String(c.env?.ADMIN_EMAIL || 'admin@fashiondoniyabd.com');
+  const emailPromise = sendTransactionalEmail(c.env, {
+    to: adminEmail,
+    subject: `নতুন কাস্টমার বার্তা — ${name} (${phone})`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 550px; background: #FAF6F0; padding: 20px; border-radius: 8px; color: #241614;">
+        <h3 style="color: #6B0812; margin-top: 0;">নতুন ওয়েবসাইট যোগাযোগ বার্তা</h3>
+        <p><strong>প্রেরক:</strong> ${name}</p>
+        <p><strong>মোবাইল:</strong> <a href="tel:${phone}">${phone}</a></p>
+        <div style="background: #FFFFFF; padding: 12px; border-radius: 6px; border: 1px solid #E6D8C5; margin-top: 12px;">
+          <p style="margin: 0; font-size: 13px; line-height: 1.5;">${message}</p>
+        </div>
+      </div>
+    `,
+  }).catch(() => {});
+
+  if (c.executionCtx?.waitUntil) {
+    c.executionCtx.waitUntil(emailPromise);
+  }
+
   return c.json({ success: true, record }, 201);
 });
 

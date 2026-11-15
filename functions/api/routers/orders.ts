@@ -8,6 +8,8 @@ import { appendAdminLog, buildCourierTrackingUrl, normalizePhone, safeJsonParse 
 import { checkoutRateLimiter, pollingRateLimiter } from '../utils/rateLimiter';
 import { invalidateHomeCache } from '../utils/cache';
 import { clearBulkMicroCache } from './bulk';
+import { sendTransactionalEmail } from '../utils/email';
+import { sendTransactionalSms } from '../utils/sms';
 
 export const ordersRouter = new Hono<AppEnv>();
 export const adminOrdersRouter = new Hono<AppEnv>();
@@ -279,6 +281,53 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
   );
   await invalidateHomeCache(c.env);
   clearBulkMicroCache();
+
+  if (normalizedCustomer.email && normalizedCustomer.email.includes('@')) {
+    const emailPromise = sendTransactionalEmail(c.env, {
+      to: normalizedCustomer.email,
+      toName: normalizedCustomer.fullName,
+      subject: `অর্ডার নিশ্চিতকরণ (${orderNumber}) — ফ্যাশন দনিয়া`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #FAF6F0; padding: 24px; border-radius: 12px; color: #241614;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h2 style="color: #6B0812; margin: 0;">Fashion Doniya BD</h2>
+            <p style="font-size: 12px; color: #8A5A10; margin-top: 4px;">কাপড়ের আভিজাত্য · ৩.৫ ও ২.৫ হাত বহর</p>
+          </div>
+          <div style="background: #FFFFFF; padding: 20px; border-radius: 8px; border: 1px solid #E6D8C5;">
+            <h3 style="color: #241614; margin-top: 0;">ধন্যবাদ, ${normalizedCustomer.fullName}!</h3>
+            <p style="font-size: 14px; color: #523A35;">আপনার অর্ডারটি সফলভাবে গৃহীত হয়েছে। শীঘ্রই আমাদের প্রতিনিধি আপনার সাথে যোগাযোগ করবেন।</p>
+            <div style="background: #FAF8F4; padding: 12px; border-radius: 6px; margin: 16px 0; border-left: 4px solid #6B0812;">
+              <p style="margin: 0; font-size: 13px;"><strong>অর্ডার নম্বর:</strong> ${orderNumber}</p>
+              <p style="margin: 4px 0 0; font-size: 13px;"><strong>পেমেন্ট মেথড:</strong> ${orderData.paymentMethod}</p>
+              <p style="margin: 4px 0 0; font-size: 13px;"><strong>মোট মূল্য:</strong> ৳${orderData.grandTotal}</p>
+              <p style="margin: 4px 0 0; font-size: 13px;"><strong>ডেলিভারি ঠিকানা:</strong> ${normalizedCustomer.fullAddress || ''}, ${normalizedCustomer.district}</p>
+            </div>
+            <div style="text-align: center; margin-top: 24px;">
+              <a href="https://fashiondoniyabd.com/order-tracking" style="display: inline-block; background: #6B0812; color: #FFFFFF; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 13px;">অর্ডার ট্র্যাক করুন</a>
+            </div>
+          </div>
+          <div style="text-align: center; margin-top: 20px; font-size: 11px; color: #6E5750;">
+            <p>যেকোনো প্রয়োজনে যোগাযোগ করুন | ফ্যাশন দনিয়া বিডি</p>
+          </div>
+        </div>
+      `,
+    }).catch(() => {});
+
+    if (c.executionCtx?.waitUntil) {
+      c.executionCtx.waitUntil(emailPromise);
+    }
+  }
+
+  if (normalizedCustomer.phone) {
+    const smsPromise = sendTransactionalSms(c.env, {
+      to: normalizedCustomer.phone,
+      message: `Fashion Doniya: প্রিয় ${normalizedCustomer.fullName}, আপনার অর্ডার (${orderNumber}) গ্রহণ করা হয়েছে। মোট: ৳${orderData.grandTotal}। ধন্যবাদ!`,
+    }).catch(() => {});
+
+    if (c.executionCtx?.waitUntil) {
+      c.executionCtx.waitUntil(smsPromise);
+    }
+  }
 
   const row = await db.select().from(orders).where(eq(orders.id, id)).get();
   const hydrated = row ? await hydrateOrderRow(db, row) : orderData;
@@ -677,11 +726,12 @@ adminOrdersRouter.delete('/:id', async (c) => {
   await db.delete(courierInfo).where(eq(courierInfo.orderId, row.id));
   await db.delete(orders).where(eq(orders.id, row.id));
 
+  const cust = safeJsonParse<{ fullName?: string; phone?: string }>(row.customer, {});
   await appendAdminLog(
     db,
     `অর্ডার মুছে ফেলা হয়েছে: ${row.orderNumber}`,
     'order',
-    `গ্রাহক: ${row.customerName} (${row.customerPhone}) · মোট: ৳${row.grandTotal}`
+    `গ্রাহক: ${cust.fullName || 'Unknown'} (${cust.phone || ''}) · মোট: ৳${row.totalAmount}`
   );
 
   clearBulkMicroCache();

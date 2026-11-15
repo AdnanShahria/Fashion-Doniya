@@ -51,6 +51,11 @@ export interface Bindings {
   EMAIL_WEBHOOK_SECRET?: string;
   INDEXNOW_KEY?: string;
   COURIER_WEBHOOK_SECRET?: string;
+  SMS_PROVIDER?: string;
+  GREENWEB_API_TOKEN?: string;
+  BULKSMSBD_API_KEY?: string;
+  BULKSMSBD_SENDER_ID?: string;
+  SMS_SENDER_ID?: string;
   CLOUDFLARE_API_TOKEN?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
   PORT?: string;
