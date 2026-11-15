@@ -19,6 +19,9 @@ export interface Bindings {
   ALLOWED_ORIGINS?: string;
   GEMINI_API_KEY?: string;
   IMGBB_API_KEY?: string;
+  ORBITMAIL_API_KEY?: string;
+  ORBITMAIL_URL?: string;
+  ORBITMAIL_FROM?: string;
   SENDPULSE_CLIENT_ID?: string;
   SENDPULSE_CLIENT_SECRET?: string;
   SENDPULSE_API_USER_ID?: string;

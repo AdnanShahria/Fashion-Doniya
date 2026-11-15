@@ -1,6 +1,6 @@
 import type { Bindings } from '../types';
 
-export type EmailProviderName = 'sendpulse' | 'resend' | 'ses' | 'google_script';
+export type EmailProviderName = 'orbitmail' | 'sendpulse' | 'resend' | 'ses' | 'google_script';
 
 export interface SendEmailOptions {
   to: string;
@@ -27,11 +27,63 @@ export interface SendEmailResult {
 }
 
 const DEFAULT_PROVIDER_ORDER: EmailProviderName[] = [
+  'orbitmail',
   'sendpulse',
   'resend',
   'ses',
   'google_script',
 ];
+
+/**
+ * OrbitMail Native Client (Next.js App Router / Node.js / Bun / Edge / Workers)
+ * Works in Server Actions, Route Handlers, and Background Workers
+ * Zero external SDK required - Native Fetch.
+ */
+export async function sendEmail({
+  to,
+  subject,
+  html,
+  env,
+}: {
+  to: string | string[];
+  subject: string;
+  html: string;
+  env?: Bindings;
+}): Promise<{ id: string; status?: string; [key: string]: unknown }> {
+  const apiKey =
+    env?.ORBITMAIL_API_KEY ||
+    (typeof process !== 'undefined' ? process.env?.ORBITMAIL_API_KEY : '') ||
+    '';
+  const url =
+    env?.ORBITMAIL_URL ||
+    (typeof process !== 'undefined' ? process.env?.ORBITMAIL_URL : '') ||
+    'https://mail.orbitsaas.cloud/api/v1/send';
+  const from =
+    env?.ORBITMAIL_FROM ||
+    (typeof process !== 'undefined' ? process.env?.ORBITMAIL_FROM : '') ||
+    'notifications@fashion-doniya.com';
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from,
+      to: Array.isArray(to) ? to : [to],
+      subject,
+      html,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`OrbitMail send failed (${res.status}): ${err}`);
+  }
+
+  return await res.json(); // { id: "msg_...", status: "accepted" }
+}
 
 const encoder = new TextEncoder();
 
@@ -139,6 +191,13 @@ function resolveSendPulseCredentials(env: Bindings) {
 }
 
 export function getEmailProvidersStatus(env: Bindings) {
+  const hasOrbitMail = Boolean(
+    String(
+      env?.ORBITMAIL_API_KEY ||
+        (typeof process !== 'undefined' ? process.env?.ORBITMAIL_API_KEY : '') ||
+        ''
+    ).trim()
+  );
   const sp = resolveSendPulseCredentials(env);
   const hasSendPulse = Boolean(sp.clientId && sp.clientSecret);
   const hasResend = Boolean(String(env?.RESEND_API_KEY || '').trim());
@@ -149,6 +208,7 @@ export function getEmailProvidersStatus(env: Bindings) {
   const hasGoogleScript = Boolean(String(env?.GOOGLE_SCRIPT_URL || '').trim());
 
   return {
+    orbitmail: hasOrbitMail,
     sendpulse: hasSendPulse,
     resend: hasResend,
     ses: hasSes,
@@ -494,10 +554,46 @@ async function sendViaGoogleScript(
   }
 }
 
+async function sendViaOrbitMail(
+  env: Bindings,
+  opts: SendEmailOptions
+): Promise<EmailAttemptResult | null> {
+  const apiKey = String(
+    env?.ORBITMAIL_API_KEY ||
+      (typeof process !== 'undefined' ? process.env?.ORBITMAIL_API_KEY : '') ||
+      ''
+  ).trim();
+
+  if (!apiKey) return null;
+
+  try {
+    const data = await sendEmail({
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+      env,
+    });
+
+    return {
+      provider: 'orbitmail',
+      ok: true,
+      status: 200,
+      messageId: (data?.id || (data as any)?.messageId) as string | undefined,
+    };
+  } catch (err) {
+    return {
+      provider: 'orbitmail',
+      ok: false,
+      error: err instanceof Error ? err.message : 'OrbitMail delivery failed',
+    };
+  }
+}
+
 const PROVIDER_HANDLERS: Record<
   EmailProviderName,
   (env: Bindings, opts: SendEmailOptions) => Promise<EmailAttemptResult | null>
 > = {
+  orbitmail: sendViaOrbitMail,
   sendpulse: sendViaSendPulse,
   resend: sendViaResend,
   ses: sendViaAmazonSes,
