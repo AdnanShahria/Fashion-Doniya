@@ -1,9 +1,9 @@
 import { Hono, type Context } from 'hono';
 import { eq, or } from 'drizzle-orm';
 import type { AppEnv } from '../types';
-import { orders, trackings, courierInfo, orderItems, products } from '../../../backend/server/db/schemas/index';
+import { orders, trackings, courierInfo, orderItems, products, coupons } from '../../../backend/server/db/schemas/index';
 import type { Order, OrderStatus, PaymentStatus } from '../../../frontend/src/types/index';
-import { getAllOrdersHydrated, hydrateOrderRow } from '../utils/mappers';
+import { getAllOrdersHydrated, hydrateOrderRow, getStoreAndPaymentSettings } from '../utils/mappers';
 import { appendAdminLog, buildCourierTrackingUrl, normalizePhone, safeJsonParse } from '../utils/helpers';
 import { checkoutRateLimiter, pollingRateLimiter } from '../utils/rateLimiter';
 import { invalidateHomeCache } from '../utils/cache';
@@ -190,6 +190,74 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
 
   const authUser = c.get('user');
 
+  // Security Hardening: Authoritative Server-Side Price & Total Calculation (Prevents Price Tampering)
+  const allProds = await db.select().from(products);
+  const prodMap = new Map(allProds.map((p) => [p.id, p]));
+
+  let verifiedSubtotal = 0;
+  const verifiedItems = orderData.items.map((item) => {
+    const prod = prodMap.get(item.productId);
+    const yards = Math.max(0.25, Number(item.yards || 1));
+    const pricePerYard = prod
+      ? Number(prod.discountPrice ?? prod.pricePerYard)
+      : Math.max(0, Number(item.pricePerYard || 0));
+
+    let addonTotal = 0;
+    if (Array.isArray(item.selectedAddons)) {
+      for (const addon of item.selectedAddons) {
+        const addonCost = Number(addon?.totalAddonPrice || 0);
+        if (addonCost > 0) {
+          addonTotal += addonCost;
+        }
+      }
+    }
+
+    const lineTotal = Math.round(pricePerYard * yards + addonTotal);
+    verifiedSubtotal += lineTotal;
+
+    return {
+      ...item,
+      yards,
+      pricePerYard,
+      finalProductPrice: lineTotal,
+    };
+  });
+
+  // Authoritative Delivery Charge Verification
+  const isInsideDhaka =
+    normalizedCustomer.district?.trim().toLowerCase() === 'ঢাকা' ||
+    normalizedCustomer.district?.trim().toLowerCase() === 'dhaka';
+  const defaultDeliveryFee = isInsideDhaka ? 80 : 150;
+  const verifiedDeliveryFee = verifiedSubtotal >= 2000 ? 0 : defaultDeliveryFee;
+
+  // Authoritative Coupon Verification
+  let verifiedDiscount = 0;
+  const couponCode = orderData.couponCode ? String(orderData.couponCode).trim().toUpperCase() : null;
+  if (couponCode) {
+    const foundCoupon = await db.select().from(coupons).where(eq(coupons.code, couponCode)).get();
+    if (foundCoupon && foundCoupon.isActive) {
+      if (!foundCoupon.minOrderAmount || verifiedSubtotal >= foundCoupon.minOrderAmount) {
+        verifiedDiscount =
+          foundCoupon.discountType === 'percentage'
+            ? Math.round((verifiedSubtotal * foundCoupon.discountValue) / 100)
+            : Math.min(verifiedSubtotal, foundCoupon.discountValue);
+      }
+    } else {
+      const { settings } = await getStoreAndPaymentSettings(db);
+      const cfgCoupon = (settings.coupons || []).find(
+        (cp) => cp.code?.trim().toUpperCase() === couponCode && cp.isActive
+      );
+      if (cfgCoupon && (!cfgCoupon.minOrderAmount || verifiedSubtotal >= cfgCoupon.minOrderAmount)) {
+        verifiedDiscount =
+          cfgCoupon.discountType === 'percentage'
+            ? Math.round((verifiedSubtotal * cfgCoupon.discountValue) / 100)
+            : Math.min(verifiedSubtotal, cfgCoupon.discountValue);
+      }
+    }
+  }
+
+  const verifiedGrandTotal = Math.max(0, verifiedSubtotal + verifiedDeliveryFee - verifiedDiscount);
+
   await db
     .insert(orders)
     .values({
@@ -197,12 +265,12 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
       orderNumber,
       userId: authUser?.id || null,
       customer: JSON.stringify(normalizedCustomer),
-      items: JSON.stringify(orderData.items),
-      subtotal: Math.max(0, Number(orderData.subtotal || 0)),
-      deliveryCharge: Math.max(0, Number(orderData.deliveryCharge || 0)),
-      discountAmount: Math.max(0, Number(orderData.discount || 0)),
-      couponCode: orderData.couponCode || null,
-      totalAmount: Math.max(0, Number(orderData.grandTotal || 0)),
+      items: JSON.stringify(verifiedItems),
+      subtotal: verifiedSubtotal,
+      deliveryCharge: verifiedDeliveryFee,
+      discountAmount: verifiedDiscount,
+      couponCode,
+      totalAmount: verifiedGrandTotal,
       paymentMethod: orderData.paymentMethod || 'cod',
       paymentStatus: orderData.paymentStatus || 'Pending',
       paymentDetails: orderData.paymentDetails ? JSON.stringify(orderData.paymentDetails) : null,
@@ -214,9 +282,9 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
     })
     .onConflictDoNothing();
 
-  for (let idx = 0; idx < orderData.items.length; idx++) {
-    const item = orderData.items[idx];
-    const yards = Math.max(0.25, Number(item.yards || 1));
+  for (let idx = 0; idx < verifiedItems.length; idx++) {
+    const item = verifiedItems[idx];
+    const yards = item.yards;
     const customPayload = item.isCustomized || item.customMeasurements || item.outfitCategory || item.selectedAddons
       ? {
           isCustomized: item.isCustomized,
@@ -237,18 +305,15 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
         productName: item.productName || item.productId,
         sku: null,
         yards,
-        pricePerYard: Math.max(0, Number(item.pricePerYard || 0)),
-        lineTotal: Math.max(
-          0,
-          Number(item.finalProductPrice ?? item.subtotal ?? (item.pricePerYard || 0) * yards)
-        ),
+        pricePerYard: item.pricePerYard,
+        lineTotal: item.finalProductPrice,
         selectedColor: item.color || null,
         customization: customPayload ? JSON.stringify(customPayload) : null,
       })
       .onConflictDoNothing();
 
     // Deduct stock yards gracefully (clamp at 0)
-    const prod = await db.select().from(products).where(eq(products.id, item.productId)).get();
+    const prod = prodMap.get(item.productId);
     if (prod) {
       const nextStock = Math.max(0, Number((prod.stockYards - yards).toFixed(2)));
       await db
@@ -276,7 +341,7 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
     db,
     `নতুন অর্ডার (${orderNumber})`,
     'order',
-    `${normalizedCustomer.fullName} · ৳${orderData.grandTotal}`,
+    `${normalizedCustomer.fullName} · ৳${verifiedGrandTotal}`,
     'Customer'
   );
   await invalidateHomeCache(c.env);
@@ -299,7 +364,7 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
             <div style="background: #FAF8F4; padding: 12px; border-radius: 6px; margin: 16px 0; border-left: 4px solid #6B0812;">
               <p style="margin: 0; font-size: 13px;"><strong>অর্ডার নম্বর:</strong> ${orderNumber}</p>
               <p style="margin: 4px 0 0; font-size: 13px;"><strong>পেমেন্ট মেথড:</strong> ${orderData.paymentMethod}</p>
-              <p style="margin: 4px 0 0; font-size: 13px;"><strong>মোট মূল্য:</strong> ৳${orderData.grandTotal}</p>
+              <p style="margin: 4px 0 0; font-size: 13px;"><strong>মোট মূল্য:</strong> ৳${verifiedGrandTotal}</p>
               <p style="margin: 4px 0 0; font-size: 13px;"><strong>ডেলিভারি ঠিকানা:</strong> ${normalizedCustomer.fullAddress || ''}, ${normalizedCustomer.district}</p>
             </div>
             <div style="text-align: center; margin-top: 24px;">
@@ -331,7 +396,7 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
   if (shouldSendSecondarySms && normalizedCustomer.phone) {
     const smsPromise = sendTransactionalSms(c.env, {
       to: normalizedCustomer.phone,
-      message: `Fashion Doniya: প্রিয় ${normalizedCustomer.fullName}, আপনার অর্ডার (${orderNumber}) গ্রহণ করা হয়েছে। মোট: ৳${orderData.grandTotal}। ধন্যবাদ!`,
+      message: `Fashion Doniya: প্রিয় ${normalizedCustomer.fullName}, আপনার অর্ডার (${orderNumber}) গ্রহণ করা হয়েছে। মোট: ৳${verifiedGrandTotal}। ধন্যবাদ!`,
       isSecondaryFallback: !hasCustomerEmail,
     }).catch(() => {});
 

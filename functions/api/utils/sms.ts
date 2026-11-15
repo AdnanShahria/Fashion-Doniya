@@ -35,8 +35,9 @@ export function isSmsConfigured(env: Bindings): boolean {
 }
 
 export function isSmsGloballyEnabled(env: Bindings): boolean {
-  const disabled = String(env?.SMS_ENABLED || '').toLowerCase() === 'false';
-  return !disabled;
+  // Disconnected by default to prevent expensive third-party carrier bills.
+  // Kept intact; reconnect anytime by setting SMS_ENABLED='true' in environment variables.
+  return String(env?.SMS_ENABLED || '').toLowerCase() === 'true';
 }
 
 export async function sendTransactionalSms(

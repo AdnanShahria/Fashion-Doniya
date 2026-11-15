@@ -52,6 +52,25 @@ customersRouter.post('/sync', async (c) => {
     );
   }
 
+  // Security Hardening (BOLA Guard): If account has a password, verify ownership or admin rights
+  const authUser = c.get('user');
+  const isAdmin = c.get('isAdmin');
+  if (existing && existing.passwordHash) {
+    const isOwner =
+      authUser &&
+      (authUser.id === existing.id || normalizePhone(authUser.phone) === normPhone);
+    if (!isOwner && !isAdmin) {
+      return c.json(
+        {
+          success: false,
+          code: 'AUTH_REQUIRED',
+          message: 'এই অ্যাকাউন্টের তথ্য পরিবর্তন করতে অনুগ্রহ করে প্রথমে পাসওয়ার্ড দিয়ে লগইন করুন।',
+        },
+        401
+      );
+    }
+  }
+
   const now = new Date().toISOString();
   if (existing) {
     await db

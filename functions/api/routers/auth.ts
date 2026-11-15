@@ -33,9 +33,9 @@ authRouter.post('/register', authRateLimiter, async (c) => {
   const password = String(body.password || '');
   const email = body.email ? String(body.email).trim().toLowerCase() : null;
 
-  if (!fullName || !phone || !password || password.length < 4) {
+  if (!fullName || !phone || !password || password.length < 6) {
     return c.json(
-      { success: false, message: 'নাম, মোবাইল নম্বর এবং কমপক্ষে ৪ অক্ষরের পাসওয়ার্ড আবশ্যক।' },
+      { success: false, message: 'নাম, মোবাইল নম্বর এবং কমপক্ষে ৬ অক্ষরের পাসওয়ার্ড আবশ্যক।' },
       400
     );
   }

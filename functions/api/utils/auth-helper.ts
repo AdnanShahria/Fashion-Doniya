@@ -180,10 +180,14 @@ export async function resolveAuthContext(c: Context<AppEnv>): Promise<{
   isDemo: boolean;
 }> {
   const env = c.env;
+  // Security Hardening: Static admin keys must only be accepted via secure headers
+  // to prevent leaking secrets in browser history, proxy logs, and Referer headers.
+  // Query param token is strictly scoped to GET /stream (browser EventSource limitations).
+  const isSseStreamRoute = c.req.path.includes('/stream');
   const adminKeyHeader =
     c.req.header('x-admin-token') ||
     c.req.header('x-api-key') ||
-    c.req.query('adminToken') ||
+    (isSseStreamRoute ? c.req.query('adminToken') : '') ||
     '';
 
   const expectedAdminKey = String(env?.ADMIN_API_KEY || '').trim();
