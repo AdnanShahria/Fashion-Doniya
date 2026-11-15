@@ -181,21 +181,82 @@ authRouter.get('/me', async (c) => {
 });
 
 // Forgot password (sends OTP via SendPulse/fallback email)
+// Forgot password (Email is Primary; SMS is strictly Secondary fallback)
 authRouter.post('/forgot-password', authRateLimiter, async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const identifier = String(body.email || body.phone || '').trim();
+  const newPassword = String(body.newPassword || '').trim();
+
   if (!identifier) {
     return c.json({ success: false, message: 'ইমেইল বা মোবাইল নম্বর প্রদান করুন।' }, 400);
   }
+
   const db = c.get('db');
+  const allUsers = await db.select().from(users);
+  const cleanId = identifier.toLowerCase();
+  const cleanPhone = normalizePhone(cleanId);
+  const userRow = allUsers.find(
+    (u) =>
+      (u.email && u.email.toLowerCase() === cleanId) ||
+      (cleanPhone && normalizePhone(u.phone) === cleanPhone)
+  );
+
+  // If a direct new password was submitted (StoreContext reset flow)
+  if (newPassword) {
+    if (newPassword.length < 6) {
+      return c.json({ success: false, message: 'নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।' }, 400);
+    }
+    if (!userRow) {
+      return c.json({ success: false, message: 'এই ইমেইল বা ফোন নম্বরে কোনো অ্যাকাউন্ট পাওয়া যায়নি।' }, 404);
+    }
+
+    const { salt, hash } = await hashPassword(newPassword);
+    await db
+      .update(users)
+      .set({
+        passwordHash: hash,
+        passwordSalt: salt,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(users.id, userRow.id));
+
+    // Primary: Email notification
+    if (userRow.email && userRow.email.includes('@')) {
+      await sendTransactionalEmail(c.env, {
+        to: userRow.email,
+        subject: 'Fashion Doniya BD — পাসওয়ার্ড পরিবর্তিত হয়েছে',
+        html: `<p>প্রিয় ${userRow.fullName}, আপনার ফ্যাশন দনিয়া অ্যাকাউন্টের পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে।</p>`,
+        text: 'Your Fashion Doniya password has been updated successfully.',
+      }).catch(() => {});
+    } else if (userRow.phone) {
+      // Secondary: SMS (only when no email exists on account)
+      await sendTransactionalSms(c.env, {
+        to: userRow.phone,
+        message: `Fashion Doniya: আপনার অ্যাকাউন্টের পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে।`,
+        isSecondaryFallback: true,
+      }).catch(() => {});
+    }
+
+    return c.json({ success: true, message: 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!' });
+  }
+
+  // OTP Code Generation
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const { salt, hash } = await hashPassword(code);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 15 * 60 * 1000).toISOString();
 
+  const primaryEmail = (userRow?.email && userRow.email.includes('@'))
+    ? userRow.email.trim()
+    : (cleanId.includes('@') ? cleanId : '');
+
+  const secondaryPhone = userRow?.phone
+    ? userRow.phone.trim()
+    : (!cleanId.includes('@') ? cleanId : '');
+
   await db.insert(otpCodes).values({
     id: `otp-${Date.now()}`,
-    identifier: identifier.toLowerCase(),
+    identifier: (primaryEmail || secondaryPhone || cleanId).toLowerCase(),
     codeHash: `${salt}:${hash}`,
     purpose: 'password_reset',
     expiresAt,
@@ -203,23 +264,41 @@ authRouter.post('/forgot-password', authRateLimiter, async (c) => {
     createdAt: now.toISOString(),
   });
 
-  if (identifier.includes('@')) {
-    await sendTransactionalEmail(c.env, {
-      to: identifier,
+  let emailDelivered = false;
+
+  // 1. PRIMARY: Email is always attempted first whenever available
+  if (primaryEmail && primaryEmail.includes('@')) {
+    const emailResult = await sendTransactionalEmail(c.env, {
+      to: primaryEmail,
       subject: 'Fashion Doniya BD — পাসওয়ার্ড রিসেট কোড (OTP)',
       html: `<p>আপনার পাসওয়ার্ড রিসেট ভেরিফিকেশন কোড: <strong>${code}</strong> (১৫ মিনিটের জন্য বৈধ)</p>`,
       text: `Your password reset code is: ${code}`,
     });
-  } else {
+    emailDelivered = emailResult.delivered;
+  }
+
+  // 2. SECONDARY: SMS is triggered strictly as secondary when:
+  //    - No primary email is on file for the user, OR
+  //    - Primary email delivery failed, OR
+  //    - Merchant explicitly configured dual delivery via SMS_ALWAYS_SEND=true
+  const isDualSmsEnabled = String(c.env?.SMS_ALWAYS_SEND || '').toLowerCase() === 'true';
+  const shouldSendSecondarySms = Boolean(
+    secondaryPhone && (!primaryEmail || !emailDelivered || isDualSmsEnabled)
+  );
+
+  if (shouldSendSecondarySms && secondaryPhone) {
     await sendTransactionalSms(c.env, {
-      to: identifier,
+      to: secondaryPhone,
       message: `Fashion Doniya: আপনার পাসওয়ার্ড রিসেট ভেরিফিকেশন ওটিপি (OTP) হলো ${code}। মেয়াদ ১৫ মিনিট।`,
+      isSecondaryFallback: !primaryEmail || !emailDelivered,
     });
   }
 
   return c.json({
     success: true,
-    message: 'পাসওয়ার্ড রিসেট কোড পাঠানো হয়েছে।',
+    message: emailDelivered
+      ? `আপনার ইমেইলে (${primaryEmail}) পাসওয়ার্ড রিসেট কোড পাঠানো হয়েছে।`
+      : 'পাসওয়ার্ড রিসেট কোড পাঠানো হয়েছে।',
   });
 });
 

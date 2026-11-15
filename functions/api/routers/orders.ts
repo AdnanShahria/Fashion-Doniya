@@ -318,10 +318,21 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
     }
   }
 
-  if (normalizedCustomer.phone) {
+  // 2. Secondary Channel: Transactional SMS
+  // Policy: Email is ALWAYS primary. SMS is triggered strictly as secondary when:
+  // a) Customer has NO email address on file (phone-only order), OR
+  // b) Merchant explicitly configured dual delivery via SMS_ALWAYS_SEND=true
+  const hasCustomerEmail = Boolean(normalizedCustomer.email && normalizedCustomer.email.includes('@'));
+  const isDualSmsEnabled = String(c.env?.SMS_ALWAYS_SEND || '').toLowerCase() === 'true';
+  const shouldSendSecondarySms = Boolean(
+    normalizedCustomer.phone && (!hasCustomerEmail || isDualSmsEnabled)
+  );
+
+  if (shouldSendSecondarySms && normalizedCustomer.phone) {
     const smsPromise = sendTransactionalSms(c.env, {
       to: normalizedCustomer.phone,
       message: `Fashion Doniya: প্রিয় ${normalizedCustomer.fullName}, আপনার অর্ডার (${orderNumber}) গ্রহণ করা হয়েছে। মোট: ৳${orderData.grandTotal}। ধন্যবাদ!`,
+      isSecondaryFallback: !hasCustomerEmail,
     }).catch(() => {});
 
     if (c.executionCtx?.waitUntil) {

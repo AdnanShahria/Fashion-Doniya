@@ -52,6 +52,8 @@ export interface Bindings {
   INDEXNOW_KEY?: string;
   COURIER_WEBHOOK_SECRET?: string;
   SMS_PROVIDER?: string;
+  SMS_ENABLED?: string;
+  SMS_ALWAYS_SEND?: string;
   GREENWEB_API_TOKEN?: string;
   BULKSMSBD_API_KEY?: string;
   BULKSMSBD_SENDER_ID?: string;
