@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useStore } from '../context/StoreContext';
 import { orderService } from '../services/orderService';
 import { StorageService } from '../services/storageService';
+import { api } from '../services/api';
+import { Order } from '../types';
 import {
   User,
   Package,
@@ -26,7 +28,9 @@ export const AccountPage: React.FC = () => {
     currentUser,
     loginUser,
     registerUser,
+    requestPasswordResetOtp,
     resetPassword,
+    changeUserPassword,
     logoutUser,
     updateUserProfile,
     navigateTo,
@@ -48,6 +52,9 @@ export const AccountPage: React.FC = () => {
 
   // Forgot Password Fields
   const [resetPhone, setResetPhone] = useState('');
+  const [resetOtp, setResetOtp] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
@@ -68,8 +75,10 @@ export const AccountPage: React.FC = () => {
     currentUser?.address?.fullAddress || 'ফ্ল্যাট ৪বি, বাড়ি ২৭, রোড ৮, ধানমন্ডি, ঢাকা'
   );
   const [district, setDistrict] = useState(currentUser?.address?.district || 'ঢাকা');
+  const [profileCurrentPassword, setProfileCurrentPassword] = useState('');
   const [profileNewPassword, setProfileNewPassword] = useState('');
   const [showProfilePassword, setShowProfilePassword] = useState(false);
+  const [serverUserOrders, setServerUserOrders] = useState<Order[] | null>(null);
 
   useEffect(() => {
     if (currentUser) {
@@ -79,19 +88,59 @@ export const AccountPage: React.FC = () => {
         currentUser.address?.fullAddress || 'ফ্ল্যাট ৪বি, বাড়ি ২৭, রোড ৮, ধানমন্ডি, ঢাকা'
       );
       setDistrict(currentUser.address?.district || 'ঢাকা');
+      api
+        .get('/orders/my')
+        .then((res) => {
+          if (res.data?.success && Array.isArray(res.data.orders)) {
+            setServerUserOrders(res.data.orders);
+          }
+        })
+        .catch(() => {});
+    } else {
+      setServerUserOrders(null);
     }
   }, [currentUser]);
 
-  // Customer's order history
+  // Customer's order history (strict phone/user match — never match by fullName!)
   const allOrders = orderService.getAllOrders();
   const userOrders = currentUser
-    ? allOrders.filter(
-        (o) =>
-          StorageService.normalizePhone(o.customer.phone) ===
-            StorageService.normalizePhone(currentUser.phone) ||
-          o.customer.fullName.toLowerCase() === currentUser.fullName.toLowerCase()
-      )
+    ? serverUserOrders !== null
+      ? serverUserOrders
+      : allOrders.filter(
+          (o) =>
+            StorageService.normalizePhone(o.customer.phone) ===
+            StorageService.normalizePhone(currentUser.phone)
+        )
     : [];
+
+  const handleSendResetOtp = async () => {
+    setFeedback(null);
+    const normalized = StorageService.normalizePhone(resetPhone);
+    if (!/^01[3-9]\d{8}$/.test(normalized)) {
+      setFeedback({
+        type: 'error',
+        text: 'সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)',
+      });
+      return;
+    }
+    setIsSendingOtp(true);
+    const res = await requestPasswordResetOtp(normalized);
+    setIsSendingOtp(false);
+    if (res.success) {
+      setOtpSent(true);
+      setFeedback({
+        type: 'success',
+        text: res.devOtp
+          ? `${res.message} (ডেভেলপমেন্ট OTP: ${res.devOtp})`
+          : res.message || '৬ সংখ্যার OTP পাঠানো হয়েছে।',
+      });
+    } else {
+      setFeedback({
+        type: 'error',
+        text: res.message || 'OTP পাঠানো যায়নি। অনুগ্রহ করে পরে আবার চেষ্টা করুন।',
+      });
+    }
+  };
 
   // Handle Login / Register / Forgot Password Submit
   const handleAuthSubmit = async (e: React.FormEvent) => {
@@ -100,6 +149,24 @@ export const AccountPage: React.FC = () => {
 
     // 1. Forgot Password Flow
     if (isForgotPassword) {
+      if (!otpSent) {
+        await handleSendResetOtp();
+        return;
+      }
+      if (!/^\d{6}$/.test(resetOtp.trim())) {
+        setFeedback({
+          type: 'error',
+          text: 'আপনার ইমেইল/ফোনে পাঠানো ৬ ডিজিটের ভেরিফিকেশন কোডটি (OTP) দিন।',
+        });
+        return;
+      }
+      if (newPassword.trim().length < 6) {
+        setFeedback({
+          type: 'error',
+          text: 'নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।',
+        });
+        return;
+      }
       if (newPassword !== confirmNewPassword) {
         setFeedback({
           type: 'error',
@@ -107,17 +174,11 @@ export const AccountPage: React.FC = () => {
         });
         return;
       }
-      const ok = await resetPassword(resetPhone, newPassword);
+      const ok = await resetPassword(resetPhone, newPassword, resetOtp.trim());
       if (!ok) {
-        const normalized = StorageService.normalizePhone(resetPhone);
-        const isValidPhone = /^01[3-9]\d{8}$/.test(normalized);
         setFeedback({
           type: 'error',
-          text: !isValidPhone
-            ? 'সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)'
-            : newPassword.trim().length < 4
-            ? 'নতুন পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে'
-            : 'এই মোবাইল নম্বর দিয়ে কোনো নিবন্ধিত অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে নতুন অ্যাকাউন্ট রেজিস্টার করুন।',
+          text: 'OTP কোডটি সঠিক নয় অথবা মেয়াদ শেষ হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।',
         });
         return;
       }
@@ -148,17 +209,17 @@ export const AccountPage: React.FC = () => {
       if (!ok) {
         const normalized = StorageService.normalizePhone(regPhone);
         const isValidPhone = /^01[3-9]\d{8}$/.test(normalized);
-        setFeedback({
-          type: 'error',
-          text:
-            regName.trim().length < 2
-              ? 'অনুগ্রহ করে আপনার পুরো নাম লিখুন'
-              : !isValidPhone
-              ? 'সঠিক ১১ ডিজিটের বাংলাদেশী মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)'
-              : regPassword.trim().length < 4
-              ? 'পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে'
-              : 'এই মোবাইল নম্বর দিয়ে ইতিমধ্যে অ্যাকাউন্ট খোলা আছে। অনুগ্রহ করে লগইন করুন।',
-        });
+      setFeedback({
+        type: 'error',
+        text:
+          regName.trim().length < 2
+            ? 'অনুগ্রহ করে আপনার পুরো নাম লিখুন'
+            : !isValidPhone
+            ? 'সঠিক ১১ ডিজিটের বাংলাদেশী মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)'
+            : regPassword.trim().length < 6
+            ? 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে'
+            : 'এই মোবাইল নম্বর দিয়ে ইতিমধ্যে অ্যাকাউন্ট খোলা আছে। অনুগ্রহ করে লগইন করুন।',
+      });
       }
       return;
     }
@@ -212,8 +273,12 @@ export const AccountPage: React.FC = () => {
   const handleProfilePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
-    const ok = await resetPassword(currentUser.phone, profileNewPassword);
+    if (profileNewPassword.trim().length < 6) {
+      return;
+    }
+    const ok = await changeUserPassword(profileCurrentPassword, profileNewPassword);
     if (ok) {
+      setProfileCurrentPassword('');
       setProfileNewPassword('');
     }
   };
@@ -331,6 +396,8 @@ export const AccountPage: React.FC = () => {
                         type="button"
                         onClick={() => {
                           setIsForgotPassword(false);
+                          setOtpSent(false);
+                          setResetOtp('');
                           setFeedback(null);
                         }}
                         className="text-[11px] font-bold text-[#6B0812] hover:underline cursor-pointer"
@@ -346,7 +413,13 @@ export const AccountPage: React.FC = () => {
                         type="tel"
                         inputMode="numeric"
                         value={resetPhone}
-                        onChange={(e) => setResetPhone(e.target.value)}
+                        onChange={(e) => {
+                          setResetPhone(e.target.value);
+                          if (otpSent) {
+                            setOtpSent(false);
+                            setResetOtp('');
+                          }
+                        }}
                         placeholder="017XXXXXXXX"
                         required
                         className="w-full px-3 py-2 text-xs font-semibold text-[#241614] placeholder:text-[#8C7A72] bg-transparent outline-none tabular-nums"
@@ -354,65 +427,104 @@ export const AccountPage: React.FC = () => {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-bold text-[#2B1816] mb-1">
-                      নতুন পাসওয়ার্ড দিন <span className="text-[#9E0B16]">*</span>
-                    </label>
-                    <div className="relative flex items-center rounded-xl border border-[#E2D0B8] focus-within:border-[#6B0812] bg-[#FDFBF7] overflow-hidden transition-colors">
-                      <Lock className="w-3.5 h-3.5 text-[#6B0812]/60 ml-3 shrink-0 pointer-events-none" />
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        placeholder="কমপক্ষে ৪ অক্ষরের নতুন পাসওয়ার্ড"
-                        required
-                        minLength={4}
-                        className="w-full px-2.5 py-2 text-xs font-medium text-[#241614] placeholder:text-[#8C7A72] bg-transparent outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((prev) => !prev)}
-                        aria-label={showPassword ? 'পাসওয়ার্ড লুকান' : 'পাসওয়ার্ড দেখুন'}
-                        className="px-2.5 py-1.5 text-[#6B0812]/75 hover:text-[#6B0812] flex items-center shrink-0 cursor-pointer"
-                      >
-                        {showPassword ? (
-                          <EyeOff className="w-4 h-4" />
-                        ) : (
-                          <Eye className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
+                  {!otpSent ? (
+                    <button
+                      type="button"
+                      disabled={isSendingOtp}
+                      onClick={handleSendResetOtp}
+                      className="w-full py-2.5 bg-[#6B0812] hover:bg-[#850B16] disabled:opacity-60 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                    >
+                      {isSendingOtp ? 'OTP পাঠানো হচ্ছে...' : 'ভেরিফিকেশন কোড (OTP) পাঠান'}
+                    </button>
+                  ) : (
+                    <>
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[11px] font-bold text-[#2B1816]">
+                            ৬ ডিজিটের OTP কোড <span className="text-[#9E0B16]">*</span>
+                          </label>
+                          <button
+                            type="button"
+                            disabled={isSendingOtp}
+                            onClick={handleSendResetOtp}
+                            className="text-[11px] font-semibold text-[#6B0812] hover:underline cursor-pointer"
+                          >
+                            {isSendingOtp ? 'পাঠানো হচ্ছে...' : 'পুনরায় কোড পাঠান'}
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={resetOtp}
+                          onChange={(e) => setResetOtp(e.target.value.replace(/\D/g, ''))}
+                          placeholder="যেমন: 123456"
+                          required
+                          className="w-full px-3 py-2 text-xs font-bold tracking-widest text-[#241614] placeholder:text-[#8C7A72] bg-[#FDFBF7] border border-[#E2D0B8] focus:border-[#6B0812] rounded-xl outline-none tabular-nums"
+                        />
+                      </div>
 
-                  <div>
-                    <label className="block text-[11px] font-bold text-[#2B1816] mb-1">
-                      নতুন পাসওয়ার্ড নিশ্চিত করুন <span className="text-[#9E0B16]">*</span>
-                    </label>
-                    <div className="relative flex items-center rounded-xl border border-[#E2D0B8] focus-within:border-[#6B0812] bg-[#FDFBF7] overflow-hidden transition-colors">
-                      <Lock className="w-3.5 h-3.5 text-[#6B0812]/60 ml-3 shrink-0 pointer-events-none" />
-                      <input
-                        type={showConfirmPassword ? 'text' : 'password'}
-                        value={confirmNewPassword}
-                        onChange={(e) => setConfirmNewPassword(e.target.value)}
-                        placeholder="পুনরায় নতুন পাসওয়ার্ড লিখুন"
-                        required
-                        minLength={4}
-                        className="w-full px-2.5 py-2 text-xs font-medium text-[#241614] placeholder:text-[#8C7A72] bg-transparent outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirmPassword((prev) => !prev)}
-                        aria-label={showConfirmPassword ? 'পাসওয়ার্ড লুকান' : 'পাসওয়ার্ড দেখুন'}
-                        className="px-2.5 py-1.5 text-[#6B0812]/75 hover:text-[#6B0812] flex items-center shrink-0 cursor-pointer"
-                      >
-                        {showConfirmPassword ? (
-                          <EyeOff className="w-4 h-4" />
-                        ) : (
-                          <Eye className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-[#2B1816] mb-1">
+                          নতুন পাসওয়ার্ড দিন <span className="text-[#9E0B16]">*</span>
+                        </label>
+                        <div className="relative flex items-center rounded-xl border border-[#E2D0B8] focus-within:border-[#6B0812] bg-[#FDFBF7] overflow-hidden transition-colors">
+                          <Lock className="w-3.5 h-3.5 text-[#6B0812]/60 ml-3 shrink-0 pointer-events-none" />
+                          <input
+                            type={showPassword ? 'text' : 'password'}
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            placeholder="কমপক্ষে ৬ অক্ষরের নতুন পাসওয়ার্ড"
+                            required
+                            minLength={6}
+                            className="w-full px-2.5 py-2 text-xs font-medium text-[#241614] placeholder:text-[#8C7A72] bg-transparent outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword((prev) => !prev)}
+                            aria-label={showPassword ? 'পাসওয়ার্ড লুকান' : 'পাসওয়ার্ড দেখুন'}
+                            className="px-2.5 py-1.5 text-[#6B0812]/75 hover:text-[#6B0812] flex items-center shrink-0 cursor-pointer"
+                          >
+                            {showPassword ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-[#2B1816] mb-1">
+                          নতুন পাসওয়ার্ড নিশ্চিত করুন <span className="text-[#9E0B16]">*</span>
+                        </label>
+                        <div className="relative flex items-center rounded-xl border border-[#E2D0B8] focus-within:border-[#6B0812] bg-[#FDFBF7] overflow-hidden transition-colors">
+                          <Lock className="w-3.5 h-3.5 text-[#6B0812]/60 ml-3 shrink-0 pointer-events-none" />
+                          <input
+                            type={showConfirmPassword ? 'text' : 'password'}
+                            value={confirmNewPassword}
+                            onChange={(e) => setConfirmNewPassword(e.target.value)}
+                            placeholder="পুনরায় নতুন পাসওয়ার্ড লিখুন"
+                            required
+                            minLength={6}
+                            className="w-full px-2.5 py-2 text-xs font-medium text-[#241614] placeholder:text-[#8C7A72] bg-transparent outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowConfirmPassword((prev) => !prev)}
+                            aria-label={showConfirmPassword ? 'পাসওয়ার্ড লুকান' : 'পাসওয়ার্ড দেখুন'}
+                            className="px-2.5 py-1.5 text-[#6B0812]/75 hover:text-[#6B0812] flex items-center shrink-0 cursor-pointer"
+                          >
+                            {showConfirmPassword ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </>
               ) : authTab === 'register' ? (
                 /* ==================== REGISTER FORM ==================== */
@@ -464,9 +576,9 @@ export const AccountPage: React.FC = () => {
                         type={showPassword ? 'text' : 'password'}
                         value={regPassword}
                         onChange={(e) => setRegPassword(e.target.value)}
-                        placeholder="কমপক্ষে ৪ অক্ষরের পাসওয়ার্ড"
+                        placeholder="কমপক্ষে ৬ অক্ষরের পাসওয়ার্ড"
                         required
-                        minLength={4}
+                        minLength={6}
                         className="w-full px-2.5 py-2 text-xs font-medium text-[#241614] placeholder:text-[#8C7A72] bg-transparent outline-none"
                       />
                       <button
@@ -583,19 +695,21 @@ export const AccountPage: React.FC = () => {
               )}
 
               {/* Full-Width Maroon Submit Button */}
-              <button
-                type="submit"
-                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#850B16] via-[#6B0812] to-[#54050D] hover:from-[#960D19] hover:to-[#6B0812] active:scale-[0.98] text-white font-bold text-xs sm:text-sm shadow-[0_6px_16px_-3px_rgba(107,8,18,0.4)] transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <LogIn className="w-4 h-4" />
-                <span>
-                  {isForgotPassword
-                    ? 'পাসওয়ার্ড পরিবর্তন করুন'
-                    : authTab === 'register'
-                    ? 'রেজিস্টার ও লগইন করুন'
-                    : 'লগইন করুন'}
-                </span>
-              </button>
+              {(!isForgotPassword || otpSent) && (
+                <button
+                  type="submit"
+                  className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#850B16] via-[#6B0812] to-[#54050D] hover:from-[#960D19] hover:to-[#6B0812] active:scale-[0.98] text-white font-bold text-xs sm:text-sm shadow-[0_6px_16px_-3px_rgba(107,8,18,0.4)] transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>
+                    {isForgotPassword
+                      ? 'পাসওয়ার্ড পরিবর্তন করুন'
+                      : authTab === 'register'
+                      ? 'রেজিস্টার ও লগইন করুন'
+                      : 'লগইন করুন'}
+                  </span>
+                </button>
+              )}
             </form>
 
             {/* Quick Switch Helper */}
@@ -746,15 +860,27 @@ export const AccountPage: React.FC = () => {
 
             <form onSubmit={handleProfilePasswordChange} className="space-y-3 text-xs">
               <div>
+                <label className="block text-[#242424]/70 mb-1">বর্তমান পাসওয়ার্ড</label>
+                <input
+                  type="password"
+                  value={profileCurrentPassword}
+                  onChange={(e) => setProfileCurrentPassword(e.target.value)}
+                  placeholder="আপনার বর্তমান পাসওয়ার্ড লিখুন"
+                  required
+                  className="w-full px-3 py-2 text-xs bg-[#FAF8F4] border border-[#EDE5D9] rounded-md outline-none focus:border-[#C5A46D]"
+                />
+              </div>
+
+              <div>
                 <label className="block text-[#242424]/70 mb-1">নতুন পাসওয়ার্ড</label>
                 <div className="relative flex items-center bg-[#FAF8F4] border border-[#EDE5D9] rounded-md overflow-hidden">
                   <input
                     type={showProfilePassword ? 'text' : 'password'}
                     value={profileNewPassword}
                     onChange={(e) => setProfileNewPassword(e.target.value)}
-                    placeholder="কমপক্ষে ৪ অক্ষরের নতুন পাসওয়ার্ড"
+                    placeholder="কমপক্ষে ৬ অক্ষরের নতুন পাসওয়ার্ড"
                     required
-                    minLength={4}
+                    minLength={6}
                     className="w-full px-3 py-2 text-xs bg-transparent outline-none"
                   />
                   <button

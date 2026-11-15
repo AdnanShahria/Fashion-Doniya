@@ -39,6 +39,12 @@ interface ToastInfo {
   type: 'success' | 'info' | 'error';
 }
 
+interface AppliedCouponState {
+  code: string;
+  discount: number;
+  msg: string;
+}
+
 interface StoreContextType {
   // Navigation & Page State
   currentPage: NavigationPage;
@@ -54,6 +60,7 @@ interface StoreContextType {
   products: Product[];
   settings: StoreSettings;
   cart: CartItem[];
+  appliedCoupon: AppliedCouponState | null;
   wishlist: string[];
   currentUser: CustomerUser | null;
   lastCompletedOrder: Order | null;
@@ -91,7 +98,11 @@ interface StoreContextType {
   loginDemoUser: (phone: string, fullName: string) => void;
   loginUser: (phone: string, password: string) => Promise<boolean>;
   registerUser: (fullName: string, phone: string, password: string) => Promise<boolean>;
-  resetPassword: (phone: string, newPassword: string) => Promise<boolean>;
+  requestPasswordResetOtp: (identifier: string) => Promise<{ success: boolean; devOtp?: string; message?: string }>;
+  resetPassword: (phone: string, newPassword: string, otp?: string) => Promise<boolean>;
+  changeUserPassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
+  applyCoupon: (code: string, subtotalOverride?: number) => boolean;
+  clearCoupon: (silent?: boolean) => void;
   logoutUser: () => void;
   updateUserProfile: (profile: Partial<CustomerUser>) => void;
   refreshData: () => void;
@@ -266,7 +277,27 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return StorageService.getCurrentUser();
   });
 
-  const [lastCompletedOrder, setLastCompletedOrder] = useState<Order | null>(null);
+  const [lastCompletedOrder, setLastCompletedOrderState] = useState<Order | null>(() => {
+    try {
+      const saved = sessionStorage.getItem('fd_last_completed_order');
+      return saved ? (JSON.parse(saved) as Order) : null;
+    } catch {
+      return null;
+    }
+  });
+  const setLastCompletedOrder = (order: Order | null) => {
+    setLastCompletedOrderState(order);
+    try {
+      if (order) {
+        sessionStorage.setItem('fd_last_completed_order', JSON.stringify(order));
+      } else {
+        sessionStorage.removeItem('fd_last_completed_order');
+      }
+    } catch {
+      // ignore storage errors
+    }
+  };
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCouponState | null>(null);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [buyNowItem, setBuyNowItem] = useState<CartItem | null>(null);
   const [toast, setToast] = useState<ToastInfo | null>(null);
@@ -393,14 +424,20 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       return;
     }
 
-    const categorySlugMatch = cleanPath.match(/^\/category\/([a-zA-Z0-9_-]+)/);
+    const categorySlugMatch = cleanPath.match(/^\/category\/([^/?#]+)/);
     if (categorySlugMatch) {
-      const slug = categorySlugMatch[1];
+      let slug = categorySlugMatch[1];
+      try {
+        slug = decodeURIComponent(slug);
+      } catch {
+        // keep raw slug if malformed URI component
+      }
       const allCategories = StorageService.getCategories();
       const matched = allCategories.find(
         (c) =>
           c.id === slug ||
           c.slug.toLowerCase() === slug.toLowerCase() ||
+          c.name === slug ||
           c.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') === slug.toLowerCase()
       );
       setCurrentPage('category-gallery');
@@ -570,6 +607,45 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
+  const getAddonTotals = (selectedAddons?: CartItem['selectedAddons']) => {
+    let addonYards = 0;
+    let addonPrice = 0;
+    let setBoltYards = 0;
+    if (Array.isArray(selectedAddons)) {
+      for (const addon of selectedAddons) {
+        const y = Number((Number(addon.count || 0) * Number(addon.yardsPerUnit || 0)).toFixed(2));
+        addonYards = Number((addonYards + y).toFixed(2));
+        addonPrice += Number(addon.totalAddonPrice || 0);
+        if (addon.addonId === 'orna' || !addon.fabricId || String(addon.fabricId).startsWith('set-')) {
+          setBoltYards = Number((setBoltYards + y).toFixed(2));
+        }
+      }
+    }
+    return { addonYards, addonPrice, setBoltYards };
+  };
+
+  const computeLineBreakdown = (
+    product: Product,
+    totalYards: number,
+    cfg: ReturnType<typeof measurementService.getProductCustomMeasurementConfig>,
+    selectedAddons?: CartItem['selectedAddons']
+  ) => {
+    const { addonYards, addonPrice, setBoltYards } = getAddonTotals(selectedAddons);
+    const mainYards =
+      addonYards > 0 && totalYards > addonYards + 0.01
+        ? Number((totalYards - addonYards).toFixed(2))
+        : Number(totalYards.toFixed(2));
+    const calc = measurementService.calculateCustomFabricPrice(product, mainYards, cfg);
+    return {
+      mainYards,
+      boltYards: Number((mainYards + setBoltYards).toFixed(2)),
+      addonYards,
+      addonPrice,
+      calc,
+      finalProductPrice: Math.round(calc.totalPrice + addonPrice),
+    };
+  };
+
   const addToCart = (
     product: Product,
     yards: number,
@@ -577,33 +653,53 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     notify: boolean = true,
     customization?: ProductCustomizationPayload
   ) => {
+    if (product.stockYards <= 0) {
+      showToast(`দুঃখিত, "${product.name}" বর্তমানে স্টক শেষ!`, 'error');
+      return;
+    }
+
     const color = selectedColor || product.color;
     const effectivePrice = product.discountPrice || product.pricePerYard;
     const cfg = measurementService.getProductCustomMeasurementConfig(product);
     const standardGaj = customization?.standardGaj ?? cfg.standardGaj;
-    const cleanYards = Number(yards.toFixed(2));
+    const cleanYards = Number(Math.max(product.minOrderQuantity || 0.5, yards).toFixed(2));
     const isCustom = !!customization?.isCustomized;
     const outfitKey = customization?.outfitId ? `-outfit-${customization.outfitId}` : '';
     const measSummary = measurementService.formatMeasurementsSummary(customization?.measurements);
-    const cartItemId = isCustom
-      ? `${product.id}-${product.fabricWidth}-${color}${outfitKey}-custom-${measSummary}-${customization?.customizationNotes || ''}`
+    const addonKey = customization?.selectedAddons?.length
+      ? `-addons-${customization.selectedAddons.map((a) => `${a.addonId}:${a.count}:${a.fabricId}`).join('|')}`
+      : '';
+    const cartItemId = isCustom || addonKey
+      ? `${product.id}-${product.fabricWidth}-${color}${outfitKey}${addonKey}-custom-${measSummary}-${customization?.customizationNotes || ''}`
       : `${product.id}-${product.fabricWidth}-${color}${outfitKey}`;
 
-    const calc = measurementService.calculateCustomFabricPrice(product, cleanYards, cfg);
+    const initialCalc = computeLineBreakdown(product, cleanYards, cfg, customization?.selectedAddons);
+
+    // Check cumulative bolt stock across cart lines for this product
+    const existingOtherBoltYards = cart
+      .filter((i) => i.productId === product.id)
+      .reduce((sum, i) => sum + computeLineBreakdown(product, i.yards, cfg, i.selectedAddons).boltYards, 0);
+    if (existingOtherBoltYards + initialCalc.boltYards > product.stockYards + 0.001) {
+      showToast(
+        `দুঃখিত, "${product.name}"-এর সর্বোচ্চ ${product.stockYards} গজ স্টকে আছে!`,
+        'error'
+      );
+      return;
+    }
 
     setCart((prev) => {
       const existing = prev.find((item) => item.id === cartItemId);
       if (existing) {
         const nextYards = Number((existing.yards + cleanYards).toFixed(2));
-        const nextCalc = measurementService.calculateCustomFabricPrice(product, nextYards, cfg);
+        const nextLine = computeLineBreakdown(product, nextYards, cfg, existing.selectedAddons);
         return prev.map((item) =>
           item.id === cartItemId
             ? {
                 ...item,
                 yards: nextYards,
                 customGaj: nextYards,
-                additionalGaj: nextCalc.additionalGaj,
-                finalProductPrice: nextCalc.totalPrice
+                additionalGaj: nextLine.calc.additionalGaj,
+                finalProductPrice: nextLine.finalProductPrice
               }
             : item
         );
@@ -623,11 +719,11 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           sizeMode: customization?.sizeMode || 'standard',
           standardGaj,
           customGaj: cleanYards,
-          additionalGaj: customization?.additionalGaj ?? calc.additionalGaj,
+          additionalGaj: customization?.additionalGaj ?? initialCalc.calc.additionalGaj,
           customMeasurements: customization?.measurements,
           customizationNotes: customization?.customizationNotes,
-          additionalPricePerYard: customization?.additionalPricePerYard ?? calc.additionalPricePerYard,
-          finalProductPrice: customization?.finalProductPrice ?? calc.totalPrice,
+          additionalPricePerYard: customization?.additionalPricePerYard ?? initialCalc.calc.additionalPricePerYard,
+          finalProductPrice: customization?.finalProductPrice ?? initialCalc.finalProductPrice,
           outfitCategory: customization?.outfitCategory,
           outfitId: customization?.outfitId,
           outfitImage: customization?.outfitImage,
@@ -649,21 +745,37 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const updateCartQuantity = (itemId: string, newYards: number) => {
-    if (newYards <= 0) {
+    const targetItem = cart.find((i) => i.id === itemId);
+    if (!targetItem) return;
+    const { addonYards } = getAddonTotals(targetItem.selectedAddons);
+    const minTotal = Number(((targetItem.product.minOrderQuantity || 0.5) + addonYards).toFixed(2));
+    if (newYards <= addonYards + 0.01) {
       removeFromCart(itemId);
       return;
     }
+    const boundedYards = Math.max(minTotal, Number(newYards.toFixed(2)));
+    const cfg = measurementService.getProductCustomMeasurementConfig(targetItem.product);
+    const nextLine = computeLineBreakdown(targetItem.product, boundedYards, cfg, targetItem.selectedAddons);
+    const otherBoltYards = cart
+      .filter((i) => i.id !== itemId && i.productId === targetItem.productId)
+      .reduce((sum, i) => sum + computeLineBreakdown(i.product, i.yards, cfg, i.selectedAddons).boltYards, 0);
+    if (otherBoltYards + nextLine.boltYards > targetItem.product.stockYards + 0.001) {
+      showToast(
+        `দুঃখিত, "${targetItem.product.name}"-এর সর্বোচ্চ ${targetItem.product.stockYards} গজ স্টকে আছে!`,
+        'error'
+      );
+      return;
+    }
+
     setCart((prev) =>
       prev.map((item) => {
         if (item.id !== itemId) return item;
-        const cleanYards = Number(newYards.toFixed(2));
-        const calc = measurementService.calculateCustomFabricPrice(item.product, cleanYards);
         return {
           ...item,
-          yards: cleanYards,
-          customGaj: cleanYards,
-          additionalGaj: calc.additionalGaj,
-          finalProductPrice: calc.totalPrice
+          yards: boundedYards,
+          customGaj: boundedYards,
+          additionalGaj: nextLine.calc.additionalGaj,
+          finalProductPrice: nextLine.finalProductPrice
         };
       })
     );
@@ -701,11 +813,22 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     selectedColor?: string,
     customization?: ProductCustomizationPayload
   ) => {
+    if (product.stockYards <= 0) {
+      showToast(`দুঃখিত, "${product.name}" বর্তমানে স্টক শেষ!`, 'error');
+      return;
+    }
     const color = selectedColor || product.color;
     const effectivePrice = product.discountPrice || product.pricePerYard;
     const cfg = measurementService.getProductCustomMeasurementConfig(product);
-    const cleanYards = Number(yards.toFixed(2));
-    const calc = measurementService.calculateCustomFabricPrice(product, cleanYards, cfg);
+    const cleanYards = Number(Math.max(product.minOrderQuantity || 0.5, yards).toFixed(2));
+    const lineCalc = computeLineBreakdown(product, cleanYards, cfg, customization?.selectedAddons);
+    if (lineCalc.boltYards > product.stockYards + 0.001) {
+      showToast(
+        `দুঃখিত, "${product.name}"-এর সর্বোচ্চ ${product.stockYards} গজ স্টকে আছে!`,
+        'error'
+      );
+      return;
+    }
     const buyItem: CartItem = {
       id: `buynow-${product.id}-${Date.now()}`,
       productId: product.id,
@@ -719,11 +842,11 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       sizeMode: customization?.sizeMode || 'standard',
       standardGaj: customization?.standardGaj ?? cfg.standardGaj,
       customGaj: cleanYards,
-      additionalGaj: customization?.additionalGaj ?? calc.additionalGaj,
+      additionalGaj: customization?.additionalGaj ?? lineCalc.calc.additionalGaj,
       customMeasurements: customization?.measurements,
       customizationNotes: customization?.customizationNotes,
-      additionalPricePerYard: customization?.additionalPricePerYard ?? calc.additionalPricePerYard,
-      finalProductPrice: customization?.finalProductPrice ?? calc.totalPrice,
+      additionalPricePerYard: customization?.additionalPricePerYard ?? lineCalc.calc.additionalPricePerYard,
+      finalProductPrice: customization?.finalProductPrice ?? lineCalc.finalProductPrice,
       outfitCategory: customization?.outfitCategory,
       outfitId: customization?.outfitId,
       outfitImage: customization?.outfitImage,
@@ -819,9 +942,59 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return false;
   };
 
-  const resetPassword = async (phone: string, newPassword: string): Promise<boolean> => {
+  const applyCoupon = (code: string, subtotalOverride?: number): boolean => {
+    const targetSubtotal = subtotalOverride !== undefined ? subtotalOverride : cartSubtotal;
+    if (!code.trim()) return false;
+    const res = settingsService.validateCoupon(code, targetSubtotal);
+    if (res.isValid) {
+      setAppliedCoupon({
+        code: res.coupon?.code || code.trim().toUpperCase(),
+        discount: res.discountAmount,
+        msg: res.message,
+      });
+      showToast(res.message, 'success');
+      return true;
+    }
+    showToast(res.message, 'error');
+    return false;
+  };
+
+  const clearCoupon = (silent: boolean = false) => {
+    setAppliedCoupon(null);
+    if (!silent) {
+      showToast('কুপন ডিসকাউন্ট সরানো হয়েছে', 'info');
+    }
+  };
+
+  const requestPasswordResetOtp = async (
+    identifier: string
+  ): Promise<{ success: boolean; devOtp?: string; message?: string }> => {
     try {
-      const r = await api.post('/auth/forgot-password', { phone, newPassword });
+      const r = await api.post('/auth/forgot-password', { identifier });
+      if (r.data?.success) {
+        const msg = r.data.message || 'ভেরিফিকেশন কোড (OTP) পাঠানো হয়েছে।';
+        showToast(msg, 'success');
+        return { success: true, devOtp: r.data.devOtp, message: msg };
+      }
+      const errMsg = r.data?.message || 'OTP পাঠানো যায়নি';
+      showToast(errMsg, 'error');
+      return { success: false, message: errMsg };
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'সার্ভারে সংযোগ করা যায়নি। অনুগ্রহ করে পরে আবার চেষ্টা করুন।';
+      showToast(msg, 'error');
+      return { success: false, message: msg };
+    }
+  };
+
+  const resetPassword = async (
+    phone: string,
+    newPassword: string,
+    otp?: string
+  ): Promise<boolean> => {
+    try {
+      const r = await api.post('/auth/forgot-password', { phone, newPassword, otp });
       if (r.data?.success) {
         showToast(r.data.message || 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!', 'success');
         return true;
@@ -834,13 +1007,35 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
     }
 
-    // Local / Offline fallback
-    const res = StorageService.resetUserPassword(phone, newPassword);
-    if (res.success) {
-      showToast(res.message, 'success');
-      return true;
+    if (!otp) {
+      const res = StorageService.resetUserPassword(phone, newPassword);
+      if (res.success) {
+        showToast(res.message, 'success');
+        return true;
+      }
+      showToast(res.message, 'error');
     }
-    showToast(res.message, 'error');
+    return false;
+  };
+
+  const changeUserPassword = async (
+    currentPassword: string,
+    newPassword: string
+  ): Promise<boolean> => {
+    try {
+      const r = await api.post('/auth/change-password', { currentPassword, newPassword });
+      if (r.data?.success) {
+        showToast(r.data.message || 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!', 'success');
+        return true;
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      if (msg) {
+        showToast(msg, 'error');
+        return false;
+      }
+    }
+    showToast('পাসওয়ার্ড পরিবর্তন করা যায়নি। অনুগ্রহ করে পুনরায় লগইন করে চেষ্টা করুন।', 'error');
     return false;
   };
 
@@ -886,6 +1081,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       products,
       settings,
       cart,
+      appliedCoupon,
       wishlist,
       currentUser,
       lastCompletedOrder,
@@ -910,7 +1106,11 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       loginDemoUser,
       loginUser,
       registerUser,
+      requestPasswordResetOtp,
       resetPassword,
+      changeUserPassword,
+      applyCoupon,
+      clearCoupon,
       logoutUser,
       updateUserProfile,
       refreshData,

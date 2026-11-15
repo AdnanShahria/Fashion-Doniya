@@ -286,14 +286,22 @@ bannersRouter.get('/', async (c) => {
 
 newsletterRouter.post('/subscribe', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { email?: string; phone?: string; source?: string };
-  if (!body.email && !body.phone) {
+  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+  const phone = typeof body.phone === 'string' ? body.phone.trim() : '';
+  if (!email && !phone) {
     return c.json({ success: false, message: 'ইমেইল বা মোবাইল নম্বর দিন।' }, 400);
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return c.json({ success: false, message: 'অনুগ্রহ করে সঠিক ইমেইল ঠিকানা দিন।' }, 400);
+  }
+  if (phone && phone.replace(/\D/g, '').length < 10) {
+    return c.json({ success: false, message: 'অনুগ্রহ করে সঠিক মোবাইল নম্বর দিন।' }, 400);
   }
   const db = c.get('db');
   await db.insert(newsletterLeads).values({
     id: `nl-${Date.now()}`,
-    email: body.email || null,
-    phone: body.phone || null,
+    email: email || null,
+    phone: phone || null,
     source: body.source || 'footer',
     createdAt: new Date().toISOString(),
   });

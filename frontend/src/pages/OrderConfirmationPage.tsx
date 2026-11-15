@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 
 export const OrderConfirmationPage: React.FC = () => {
-  const { lastCompletedOrder, navigateTo } = useStore();
+  const { lastCompletedOrder, navigateTo, settings } = useStore();
 
   // If accessed directly without an active last order, show fallback or demo order
   if (!lastCompletedOrder) {
@@ -64,10 +64,10 @@ export const OrderConfirmationPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Demo Disclaimer */}
-        <div className="p-3 bg-amber-50 text-amber-900 border border-amber-200/80 rounded-lg max-w-xl mx-auto text-xs flex items-center justify-center gap-2">
-          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-          <span>এটি একটি Demo Order। বর্তমানে অর্ডারটি কোনো সার্ভারে পাঠানো হচ্ছে না।</span>
+        {/* Order Confirmation Note */}
+        <div className="p-3 bg-emerald-50/80 text-emerald-900 border border-emerald-200/80 rounded-lg max-w-xl mx-auto text-xs flex items-center justify-center gap-2">
+          <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
+          <span>আপনার অর্ডারটি আমাদের সিস্টেমে সংরক্ষিত হয়েছে। অর্ডার নম্বর ও মোবাইল নম্বর দিয়ে যেকোনো সময় ট্র্যাক করতে পারবেন।</span>
         </div>
 
         {/* Action Buttons */}
@@ -282,8 +282,8 @@ export const OrderConfirmationPage: React.FC = () => {
 
         {/* Invoice Footer */}
         <div className="pt-6 border-t border-[#EDE5D9] text-center text-[11px] text-[#242424]/60 space-y-1">
-          <p>Fashion Doniya BD থেকে কেনাকাটা করার জন্য ধন্যবাদ। কোনো প্রয়োজনে হেল্পলাইনে যোগাযোগ করুন: ০১৭১২-৩৪৫৬৭৮</p>
-          <p className="font-medium text-[#242424]/80">আপনার পছন্দের কাপড়, এখন গজ হিসেবে</p>
+          <p>{settings.storeName || 'ফ্যাশন দনিয়া'} থেকে কেনাকাটা করার জন্য ধন্যবাদ। কোনো প্রয়োজনে হেল্পলাইনে যোগাযোগ করুন: {settings.supportPhone || settings.whatsappNumber}</p>
+          <p className="font-medium text-[#242424]/80">{settings.tagline || 'আপনার পছন্দের কাপড়, এখন গজ হিসেবে'}</p>
         </div>
 
       </div>

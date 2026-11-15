@@ -130,3 +130,14 @@ export async function appendAdminLog(
     // non-fatal log error
   }
 }
+
+export function safeWaitUntil(
+  c: { executionCtx?: { waitUntil?: (p: Promise<unknown>) => void } },
+  promise: Promise<unknown>
+): void {
+  try {
+    c.executionCtx?.waitUntil?.(promise);
+  } catch {
+    // Local Bun/Node server runs without a Cloudflare ExecutionContext
+  }
+}

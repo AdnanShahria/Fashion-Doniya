@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useStore } from '../context/StoreContext';
 import { FabricPatternVisual } from '../components/common/FabricPatternVisual';
 import { getUniqueProductFabricImage } from '../components/home/allProductsImageGenerator';
-import { settingsService } from '../services/settingsService';
 import { formatMeasurementsSummary } from '../services/measurementService';
 import { 
   ShoppingBag, 
@@ -27,11 +26,13 @@ export const CartPage: React.FC = () => {
     clearCart, 
     navigateTo, 
     settings,
+    appliedCoupon,
+    applyCoupon,
+    clearCoupon,
     showToast 
   } = useStore();
 
-  const [couponCode, setCouponCode] = useState('');
-  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount: number; msg: string } | null>(null);
+  const [couponCode, setCouponCode] = useState(appliedCoupon?.code || '');
   const [deliveryLocation, setDeliveryLocation] = useState<'inside' | 'outside'>('inside');
 
   const deliveryFee = deliveryLocation === 'inside' 
@@ -47,24 +48,12 @@ export const CartPage: React.FC = () => {
   const handleApplyCoupon = (e: React.FormEvent) => {
     e.preventDefault();
     if (!couponCode.trim()) return;
-
-    const res = settingsService.validateCoupon(couponCode, cartSubtotal);
-    if (res.isValid) {
-      setAppliedCoupon({
-        code: res.coupon?.code || couponCode.toUpperCase(),
-        discount: res.discountAmount,
-        msg: res.message
-      });
-      showToast(res.message, 'success');
-    } else {
-      showToast(res.message, 'error');
-    }
+    applyCoupon(couponCode, cartSubtotal);
   };
 
   const handleRemoveCoupon = () => {
-    setAppliedCoupon(null);
+    clearCoupon();
     setCouponCode('');
-    showToast('কুপন ডিসকাউন্ট সরানো হয়েছে', 'info');
   };
 
   if (cart.length === 0) {

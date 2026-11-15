@@ -89,8 +89,8 @@ export const AdminLayout: React.FC = () => {
     return null;
   });
 
-  const [loginEmail, setLoginEmail] = useState('admin@fashiondoniyabd.com');
-  const [loginPassword, setLoginPassword] = useState('Admin@2026');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
@@ -474,23 +474,24 @@ export const AdminLayout: React.FC = () => {
             </button>
           </form>
 
-          <div className="p-3.5 bg-[#FAF8F4] rounded-xl border border-[#EDE5D9] text-[11px] text-[#242424]/70 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-[#242424]">ডিফল্ট অ্যাডমিন ক্রেডেনশিয়াল:</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setLoginEmail('admin@fashiondoniyabd.com');
-                  setLoginPassword('Admin@2026');
-                }}
-                className="text-[#850B1B] font-bold hover:underline cursor-pointer"
-              >
-                অটো-ফিল করুন
-              </button>
+          {import.meta.env.DEV && (
+            <div className="p-3.5 bg-[#FAF8F4] rounded-xl border border-[#EDE5D9] text-[11px] text-[#242424]/70 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-[#242424]">ডেভেলপমেন্ট ডেমো ক্রেডেনশিয়াল:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoginEmail('admin@fashiondoniyabd.com');
+                    setLoginPassword('Admin@2026');
+                  }}
+                  className="text-[#850B1B] font-bold hover:underline cursor-pointer"
+                >
+                  অটো-ফিল করুন
+                </button>
+              </div>
+              <div className="font-mono">Email: admin@fashiondoniyabd.com</div>
             </div>
-            <div className="font-mono">Email: admin@fashiondoniyabd.com</div>
-            <div className="font-mono">Pass: Admin@2026</div>
-          </div>
+          )}
 
           <div className="text-center pt-2 border-t border-[#EDE5D9]">
             <button

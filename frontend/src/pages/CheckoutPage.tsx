@@ -27,6 +27,9 @@ export const CheckoutPage: React.FC = () => {
     clearBuyNow, 
     clearCart, 
     settings, 
+    appliedCoupon,
+    applyCoupon,
+    clearCoupon,
     setLastCompletedOrder, 
     navigateTo, 
     showToast,
@@ -44,6 +47,7 @@ export const CheckoutPage: React.FC = () => {
   const [fullName, setFullName] = useState(currentUser?.fullName || '');
   const [phone, setPhone] = useState(currentUser?.phone || '');
   const [altPhone, setAltPhone] = useState('');
+  const [email, setEmail] = useState(currentUser?.email || '');
   const [district, setDistrict] = useState('ঢাকা');
   const [upazila, setUpazila] = useState('');
   const [area, setArea] = useState('');
@@ -80,8 +84,7 @@ export const CheckoutPage: React.FC = () => {
   }, [paymentSettings, paymentMethod]);
 
   // Coupon state
-  const [couponCode, setCouponCode] = useState('');
-  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount: number } | null>(null);
+  const [couponCode, setCouponCode] = useState(appliedCoupon?.code || '');
 
   // Form error state
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
@@ -150,17 +153,7 @@ export const CheckoutPage: React.FC = () => {
   const handleApplyCoupon = (e: React.FormEvent) => {
     e.preventDefault();
     if (!couponCode.trim()) return;
-
-    const res = settingsService.validateCoupon(couponCode, subtotal);
-    if (res.isValid) {
-      setAppliedCoupon({
-        code: res.coupon?.code || couponCode.toUpperCase(),
-        discount: res.discountAmount
-      });
-      showToast(res.message, 'success');
-    } else {
-      showToast(res.message, 'error');
-    }
+    applyCoupon(couponCode, subtotal);
   };
 
   const validate = () => {
@@ -170,9 +163,19 @@ export const CheckoutPage: React.FC = () => {
     if (!normalizedCustomerPhone || !/^01[3-9]\d{8}$/.test(normalizedCustomerPhone)) {
       errs.phone = 'সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (যেমন: 01711223344)';
     }
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      errs.email = 'সঠিক ইমেইল ঠিকানা দিন (যেমন: name@example.com)';
+    }
     if (!district.trim()) errs.district = 'জেলার নাম নির্বাচন করুন';
     if (!fullAddress.trim() || fullAddress.trim().length < 8) {
       errs.fullAddress = 'সম্পূর্ণ ডেলিভারি ঠিকানা লিখুন (বাড়ি/রোড/এলাকা)';
+    }
+
+    for (const item of checkoutItems) {
+      if (item.product.stockYards <= 0) {
+        errs.stock = `দুঃখিত, "${item.product.name}" বর্তমানে স্টক শেষ!`;
+        break;
+      }
     }
 
     // Strict validation when bKash or Nagad is selected
@@ -199,6 +202,12 @@ export const CheckoutPage: React.FC = () => {
   const handlePlaceOrder = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) {
+      for (const item of checkoutItems) {
+        if (item.product.stockYards <= 0) {
+          showToast(`দুঃখিত, "${item.product.name}" বর্তমানে স্টক শেষ!`, 'error');
+          return;
+        }
+      }
       if (
         (paymentMethod === 'bkash' || paymentMethod === 'nagad') &&
         (!senderNumber.trim() || !trxId.trim())
@@ -260,6 +269,7 @@ export const CheckoutPage: React.FC = () => {
         fullName: fullName.trim(),
         phone: phone.trim(),
         altPhone: altPhone.trim() || undefined,
+        email: email.trim() || undefined,
         district: district.trim(),
         upazila: upazila.trim(),
         area: area.trim(),
@@ -295,6 +305,7 @@ export const CheckoutPage: React.FC = () => {
     } else {
       clearCart();
     }
+    clearCoupon(true);
 
     setLastCompletedOrder(createdOrder);
     setIsSubmitting(false);
@@ -422,6 +433,22 @@ export const CheckoutPage: React.FC = () => {
 
                 <div>
                   <label className="block font-semibold text-[#242424] mb-1">
+                    ইমেইল (ঐচ্ছিক — ইনভয়েস পেতে)
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="example@email.com"
+                    className={`w-full bg-[#FAF8F4] border rounded-lg px-3 py-2 text-[#242424] focus:outline-hidden ${
+                      errors.email ? 'border-rose-400 bg-rose-50/20' : 'border-[#EDE5D9] focus:border-[#C5A46D]'
+                    }`}
+                  />
+                  {errors.email && <span className="text-[11px] text-rose-500 mt-0.5 block">{errors.email}</span>}
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-[#242424] mb-1">
                     জেলা <span className="text-rose-500">*</span>
                   </label>
                   <select
@@ -429,18 +456,18 @@ export const CheckoutPage: React.FC = () => {
                     onChange={(e) => setDistrict(e.target.value)}
                     className="w-full bg-[#FAF8F4] border border-[#EDE5D9] rounded-lg px-3 py-2 text-[#242424] focus:outline-hidden focus:border-[#C5A46D]"
                   >
-                    <option value="ঢাকা">ঢাকা (ডেলিভারি ৬০৳)</option>
-                    <option value="চট্টগ্রাম">চট্টগ্রাম (ডেলিভারি ১২০৳)</option>
-                    <option value="সিলেট">সিলেট (ডেলিভারি ১২০৳)</option>
-                    <option value="রাজশাহী">রাজশাহী (ডেলিভারি ১২০৳)</option>
-                    <option value="খুলনা">খুলনা (ডেলিভারি ১২০৳)</option>
-                    <option value="বরিশাল">বরিশাল (ডেলিভারি ১২০৳)</option>
-                    <option value="রংপুর">রংপুর (ডেলিভারি ১২০৳)</option>
-                    <option value="ময়মনসিংহ">ময়মনসিংহ (ডেলিভারি ১২০৳)</option>
-                    <option value="কুমিল্লা">কুমিল্লা (ডেলিভারি ১২০৳)</option>
-                    <option value="গাজীপুর">গাজীপুর (ডেলিভারি ১২০৳)</option>
-                    <option value="নারায়ণগঞ্জ">নারায়ণগঞ্জ (ডেলিভারি ১২০৳)</option>
-                    <option value="অন্যান্য জেলা">অন্যান্য জেলা (ডেলিভারি ১২০৳)</option>
+                    <option value="ঢাকা">ঢাকা (ডেলিভারি {settings.insideDhakaDeliveryFee}৳)</option>
+                    <option value="চট্টগ্রাম">চট্টগ্রাম (ডেলিভারি {settings.outsideDhakaDeliveryFee}৳)</option>
+                    <option value="সিলেট">সিলেট (ডেলিভারি {settings.outsideDhakaDeliveryFee}৳)</option>
+                    <option value="রাজশাহী">রাজশাহী (ডেলিভারি {settings.outsideDhakaDeliveryFee}৳)</option>
+                    <option value="খুলনা">খুলনা (ডেলিভারি {settings.outsideDhakaDeliveryFee}৳)</option>
+                    <option value="বরিশাল">বরিশাল (ডেলিভারি {settings.outsideDhakaDeliveryFee}৳)</option>
+                    <option value="রংপুর">রংপুর (ডেলিভারি {settings.outsideDhakaDeliveryFee}৳)</option>
+                    <option value="ময়মনসিংহ">ময়মনসিংহ (ডেলিভারি {settings.outsideDhakaDeliveryFee}৳)</option>
+                    <option value="কুমিল্লা">কুমিল্লা (ডেলিভারি {settings.outsideDhakaDeliveryFee}৳)</option>
+                    <option value="গাজীপুর">গাজীপুর (ডেলিভারি {settings.outsideDhakaDeliveryFee}৳)</option>
+                    <option value="নারায়ণগঞ্জ">নারায়ণগঞ্জ (ডেলিভারি {settings.outsideDhakaDeliveryFee}৳)</option>
+                    <option value="অন্যান্য জেলা">অন্যান্য জেলা (ডেলিভারি {settings.outsideDhakaDeliveryFee}৳)</option>
                   </select>
                 </div>
 

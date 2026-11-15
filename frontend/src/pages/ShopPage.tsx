@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../context/StoreContext';
 import { ProductCard } from '../components/common/ProductCard';
 import { FabricWidth, Product } from '../types';
+import { getUniqueProductFabricImage } from '../components/home/allProductsImageGenerator';
 import { 
   Search, 
   SlidersHorizontal, 
@@ -39,20 +40,37 @@ export const ShopPage: React.FC = () => {
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState<number>(12);
 
+  useEffect(() => {
+    setSearch(searchQuery || '');
+  }, [searchQuery]);
+
+  useEffect(() => {
+    setWidthFilter(selectedWidthFilter || 'all');
+  }, [selectedWidthFilter]);
+
+  useEffect(() => {
+    setCategoryFilter(selectedCategory || 'all');
+  }, [selectedCategory]);
+
+  const activeProducts = useMemo(
+    () => products.filter(p => p.isActive !== false),
+    [products]
+  );
+
   // Extract unique categories & colors
   const categories = useMemo(() => {
     const set = new Set<string>();
-    products.forEach(p => set.add(p.category));
+    activeProducts.forEach(p => set.add(p.category));
     return Array.from(set);
-  }, [products]);
+  }, [activeProducts]);
 
   const colors = useMemo(() => {
     const set = new Set<string>();
-    products.forEach(p => {
+    activeProducts.forEach(p => {
       if (p.color) set.add(p.color);
     });
     return Array.from(set);
-  }, [products]);
+  }, [activeProducts]);
 
   // Filtered & Sorted products
   const filteredProducts = useMemo(() => {
@@ -250,8 +268,8 @@ export const ShopPage: React.FC = () => {
                     <span>{item.label}</span>
                     <span className="text-[11px] text-[#242424]/50 tabular-nums">
                       {item.value === 'all' 
-                        ? products.length 
-                        : products.filter(p => p.fabricWidth === item.value).length}
+                        ? activeProducts.length 
+                        : activeProducts.filter(p => p.fabricWidth === item.value).length}
                     </span>
                   </button>
                 ))}
@@ -402,6 +420,8 @@ export const ShopPage: React.FC = () => {
               {displayedProducts.map(product => {
                 const effectivePrice = product.discountPrice || product.pricePerYard;
                 const isWishlisted = isInWishlist(product.id);
+                const listImage = getUniqueProductFabricImage(product);
+                const isOutOfStock = product.stockYards <= 0;
                 return (
                   <div
                     key={product.id}
@@ -409,16 +429,25 @@ export const ShopPage: React.FC = () => {
                   >
                     <div 
                       onClick={() => navigateTo('product-details', { productId: product.id })}
-                      className="w-full sm:w-44 aspect-[4/3] shrink-0 rounded-lg overflow-hidden border border-[#EDE5D9] cursor-pointer"
+                      className="w-full sm:w-44 aspect-[4/3] shrink-0 rounded-lg overflow-hidden border border-[#EDE5D9] cursor-pointer bg-[#FAF6F0]"
                     >
-                      <FabricPatternVisual
-                        productId={product.id}
-                        patternType={product.patternType}
-                        colorHex={product.colorHex}
-                        fabricWidth={product.fabricWidth}
-                        title={product.fabricType}
-                        aspectRatio="square"
-                      />
+                      {listImage ? (
+                        <img
+                          src={listImage}
+                          alt={product.name}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <FabricPatternVisual
+                          productId={product.id}
+                          patternType={product.patternType}
+                          colorHex={product.colorHex}
+                          fabricWidth={product.fabricWidth}
+                          title={product.fabricType}
+                          aspectRatio="square"
+                        />
+                      )}
                     </div>
 
                     <div className="flex-1 space-y-1.5 text-left w-full">
@@ -456,19 +485,23 @@ export const ShopPage: React.FC = () => {
 
                     <div className="flex sm:flex-col gap-2 w-full sm:w-auto shrink-0">
                       <button
+                        type="button"
+                        disabled={isOutOfStock}
                         onClick={() => addToCart(product, product.minOrderQuantity || 1.5)}
-                        className="flex-1 sm:flex-none py-2 px-4 bg-[#FAF8F4] hover:bg-[#EDE5D9] text-[#242424] border border-[#EDE5D9] rounded-md text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                        className="flex-1 sm:flex-none py-2 px-4 bg-[#FAF8F4] hover:bg-[#EDE5D9] disabled:opacity-50 disabled:cursor-not-allowed text-[#242424] border border-[#EDE5D9] rounded-md text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <ShoppingBag className="w-3.5 h-3.5 text-[#C5A46D]" />
-                        <span>কার্টে যোগ</span>
+                        <span>{isOutOfStock ? 'স্টক শেষ' : 'কার্টে যোগ'}</span>
                       </button>
 
                       <button
+                        type="button"
+                        disabled={isOutOfStock}
                         onClick={() => buyNow(product, product.minOrderQuantity || 1.5)}
-                        className="flex-1 sm:flex-none py-2 px-4 bg-[#6B0812] hover:bg-[#53050D] active:scale-[0.98] text-white rounded-lg text-xs font-semibold shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        className="flex-1 sm:flex-none py-2 px-4 bg-[#6B0812] hover:bg-[#53050D] disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] text-white rounded-lg text-xs font-semibold shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <ShoppingBag className="w-3.5 h-3.5 text-[#C59B48]" />
-                        <span>সরাসরি কিনুন</span>
+                        <span>{isOutOfStock ? 'অপ্রাপ্য' : 'সরাসরি কিনুন'}</span>
                       </button>
                     </div>
                   </div>

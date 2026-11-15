@@ -22,7 +22,7 @@ export const FaqPage: React.FC = () => {
     },
     {
       q: 'ডেলিভারি চার্জ কত এবং কতদিনে পাব?',
-      a: 'ঢাকা সিটির ভেতরে ডেলিভারি চার্জ ৬০ টাকা এবং ২৪ থেকে ৪৮ ঘণ্টার মধ্যে ডেলিভারি সম্পন্ন হয়। ঢাকার বাইরে ডেলিভারি চার্জ ১২০ টাকা এবং ২ থেকে ৩ কার্যদিবসের মধ্যে কুরিয়ারের মাধ্যমে পৌঁছায়। মোট ২৫০০ টাকার বেশি কেনাকাটায় ডেলিভারি সম্পূর্ণ ফ্রি।'
+      a: `ঢাকা সিটির ভেতরে ডেলিভারি চার্জ ${settings.insideDhakaDeliveryFee} টাকা এবং ২৪ থেকে ৪৮ ঘণ্টার মধ্যে ডেলিভারি সম্পন্ন হয়। ঢাকার বাইরে ডেলিভারি চার্জ ${settings.outsideDhakaDeliveryFee} টাকা এবং ২ থেকে ৩ কার্যদিবসের মধ্যে কুরিয়ারের মাধ্যমে পৌঁছায়। মোট ${settings.freeDeliveryThreshold || 2500} টাকার বেশি কেনাকাটায় ডেলিভারি সম্পূর্ণ ফ্রি।`
     },
     {
       q: 'পণ্য পছন্দ না হলে কি রিটার্ন করা যাবে?',
@@ -67,6 +67,8 @@ export const FaqPage: React.FC = () => {
               className="bg-white rounded-xl border border-[#EDE5D9] overflow-hidden transition-all shadow-xs"
             >
               <button
+                type="button"
+                aria-expanded={isOpen}
                 onClick={() => setOpenIdx(isOpen ? null : idx)}
                 className="w-full text-left p-4 sm:p-5 flex items-center justify-between gap-4 font-semibold text-xs sm:text-sm text-[#242424] hover:bg-[#FAF8F4] transition-colors cursor-pointer"
               >

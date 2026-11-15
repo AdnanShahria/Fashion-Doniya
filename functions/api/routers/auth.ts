@@ -8,7 +8,7 @@ import {
   signJwt,
   resolveJwtSecret,
 } from '../utils/auth-helper';
-import { normalizePhone, safeJsonParse, appendAdminLog } from '../utils/helpers';
+import { normalizePhone, safeJsonParse, appendAdminLog, escapeHtml } from '../utils/helpers';
 import { sendTransactionalEmail } from '../utils/email';
 import { sendTransactionalSms } from '../utils/sms';
 import { authRateLimiter } from '../utils/rateLimiter';
@@ -180,12 +180,12 @@ authRouter.get('/me', async (c) => {
   });
 });
 
-// Forgot password (sends OTP via SendPulse/fallback email)
 // Forgot password (Email is Primary; SMS is strictly Secondary fallback)
 authRouter.post('/forgot-password', authRateLimiter, async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-  const identifier = String(body.email || body.phone || '').trim();
+  const identifier = String(body.email || body.phone || body.identifier || '').trim();
   const newPassword = String(body.newPassword || '').trim();
+  const otp = String(body.otp || '').trim();
 
   if (!identifier) {
     return c.json({ success: false, message: 'ইমেইল বা মোবাইল নম্বর প্রদান করুন।' }, 400);
@@ -201,7 +201,7 @@ authRouter.post('/forgot-password', authRateLimiter, async (c) => {
       (cleanPhone && normalizePhone(u.phone) === cleanPhone)
   );
 
-  // If a direct new password was submitted (StoreContext reset flow)
+  // Verify OTP before resetting password
   if (newPassword) {
     if (newPassword.length < 6) {
       return c.json({ success: false, message: 'নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।' }, 400);
@@ -209,6 +209,67 @@ authRouter.post('/forgot-password', authRateLimiter, async (c) => {
     if (!userRow) {
       return c.json({ success: false, message: 'এই ইমেইল বা ফোন নম্বরে কোনো অ্যাকাউন্ট পাওয়া যায়নি।' }, 404);
     }
+    if (!otp) {
+      return c.json(
+        {
+          success: false,
+          code: 'OTP_REQUIRED',
+          message: 'পাসওয়ার্ড রিসেট করতে ভেরিফিকেশন কোড (OTP) প্রদান করুন।',
+        },
+        400
+      );
+    }
+
+    const candidateIdentifiers = new Set<string>(
+      [
+        cleanId,
+        cleanPhone,
+        userRow.email ? userRow.email.toLowerCase().trim() : '',
+        userRow.phone ? normalizePhone(userRow.phone) : '',
+        userRow.phone ? userRow.phone.trim().toLowerCase() : '',
+      ].filter(Boolean)
+    );
+
+    const allOtpRows = await db.select().from(otpCodes);
+    const matchingOtpRows = allOtpRows
+      .filter(
+        (r) =>
+          r.purpose === 'password_reset' &&
+          !r.consumedAt &&
+          candidateIdentifiers.has(r.identifier.toLowerCase())
+      )
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const latestOtp = matchingOtpRows[0];
+    if (!latestOtp || new Date(latestOtp.expiresAt).getTime() < Date.now()) {
+      return c.json(
+        { success: false, message: 'ভেরিফিকেশন কোডটি মেয়াদোত্তীর্ণ বা পাওয়া যায়নি। নতুন করে কোড পাঠান।' },
+        400
+      );
+    }
+
+    if ((latestOtp.attempts || 0) >= 5) {
+      return c.json(
+        { success: false, message: 'অনেকবার ভুল কোড দেওয়া হয়েছে। অনুগ্রহ করে নতুন OTP সংগ্রহ করুন।' },
+        429
+      );
+    }
+
+    const [otpSalt, otpHash] = String(latestOtp.codeHash || '').split(':');
+    const isOtpValid = otpSalt && otpHash ? await verifyPassword(otp, otpSalt, otpHash) : false;
+    if (!isOtpValid) {
+      await db
+        .update(otpCodes)
+        .set({ attempts: (latestOtp.attempts || 0) + 1 })
+        .where(eq(otpCodes.id, latestOtp.id));
+      return c.json({ success: false, message: 'প্রদত্ত ভেরিফিকেশন কোড (OTP) সঠিক নয়।' }, 400);
+    }
+
+    const nowIso = new Date().toISOString();
+    await db
+      .update(otpCodes)
+      .set({ consumedAt: nowIso })
+      .where(eq(otpCodes.id, latestOtp.id));
 
     const { salt, hash } = await hashPassword(newPassword);
     await db
@@ -216,7 +277,7 @@ authRouter.post('/forgot-password', authRateLimiter, async (c) => {
       .set({
         passwordHash: hash,
         passwordSalt: salt,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso,
       })
       .where(eq(users.id, userRow.id));
 
@@ -225,7 +286,7 @@ authRouter.post('/forgot-password', authRateLimiter, async (c) => {
       await sendTransactionalEmail(c.env, {
         to: userRow.email,
         subject: 'Fashion Doniya BD — পাসওয়ার্ড পরিবর্তিত হয়েছে',
-        html: `<p>প্রিয় ${userRow.fullName}, আপনার ফ্যাশন দনিয়া অ্যাকাউন্টের পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে।</p>`,
+        html: `<p>প্রিয় ${escapeHtml(userRow.fullName)}, আপনার ফ্যাশন দনিয়া অ্যাকাউন্টের পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে।</p>`,
         text: 'Your Fashion Doniya password has been updated successfully.',
       }).catch(() => {});
     } else if (userRow.phone) {
@@ -240,6 +301,13 @@ authRouter.post('/forgot-password', authRateLimiter, async (c) => {
     return c.json({ success: true, message: 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!' });
   }
 
+  if (!userRow) {
+    return c.json(
+      { success: false, message: 'এই ইমেইল বা ফোন নম্বরে কোনো অ্যাকাউন্ট পাওয়া যায়নি।' },
+      404
+    );
+  }
+
   // OTP Code Generation
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const { salt, hash } = await hashPassword(code);
@@ -251,11 +319,11 @@ authRouter.post('/forgot-password', authRateLimiter, async (c) => {
     : (cleanId.includes('@') ? cleanId : '');
 
   const secondaryPhone = userRow?.phone
-    ? userRow.phone.trim()
-    : (!cleanId.includes('@') ? cleanId : '');
+    ? normalizePhone(userRow.phone) || userRow.phone.trim()
+    : (!cleanId.includes('@') ? cleanPhone || cleanId : '');
 
   await db.insert(otpCodes).values({
-    id: `otp-${Date.now()}`,
+    id: `otp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     identifier: (primaryEmail || secondaryPhone || cleanId).toLowerCase(),
     codeHash: `${salt}:${hash}`,
     purpose: 'password_reset',
@@ -265,6 +333,7 @@ authRouter.post('/forgot-password', authRateLimiter, async (c) => {
   });
 
   let emailDelivered = false;
+  let smsDelivered = false;
 
   // 1. PRIMARY: Email is always attempted first whenever available
   if (primaryEmail && primaryEmail.includes('@')) {
@@ -287,19 +356,68 @@ authRouter.post('/forgot-password', authRateLimiter, async (c) => {
   );
 
   if (shouldSendSecondarySms && secondaryPhone) {
-    await sendTransactionalSms(c.env, {
+    const smsRes = await sendTransactionalSms(c.env, {
       to: secondaryPhone,
       message: `Fashion Doniya: আপনার পাসওয়ার্ড রিসেট ভেরিফিকেশন ওটিপি (OTP) হলো ${code}। মেয়াদ ১৫ মিনিট।`,
       isSecondaryFallback: !primaryEmail || !emailDelivered,
-    });
+    }).catch(() => ({ delivered: false }));
+    smsDelivered = Boolean(smsRes && 'delivered' in smsRes && smsRes.delivered);
   }
+
+  const isLocalDev =
+    typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
 
   return c.json({
     success: true,
+    requiresOtp: true,
+    ...(isLocalDev && !emailDelivered && !smsDelivered ? { devOtp: code } : {}),
     message: emailDelivered
       ? `আপনার ইমেইলে (${primaryEmail}) পাসওয়ার্ড রিসেট কোড পাঠানো হয়েছে।`
-      : 'পাসওয়ার্ড রিসেট কোড পাঠানো হয়েছে।',
+      : smsDelivered
+        ? 'আপনার মোবাইল নম্বরে পাসওয়ার্ড রিসেট ভেরিফিকেশন কোড (OTP) পাঠানো হয়েছে।'
+        : 'ভেরিফিকেশন কোড (OTP) তৈরি হয়েছে। অনুগ্রহ করে কোডটি প্রবেশ করান।',
   });
+});
+
+// Authenticated Customer Password Change
+authRouter.post('/change-password', authRateLimiter, async (c) => {
+  const authUser = c.get('user');
+  if (!authUser) {
+    return c.json({ success: false, message: 'অনুগ্রহ করে প্রথমে লগইন করুন।' }, 401);
+  }
+
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const currentPassword = String(body.currentPassword || '');
+  const newPassword = String(body.newPassword || '').trim();
+
+  if (newPassword.length < 6) {
+    return c.json({ success: false, message: 'নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।' }, 400);
+  }
+
+  const db = c.get('db');
+  const userRow = await db.select().from(users).where(eq(users.id, authUser.id)).get();
+  if (!userRow) {
+    return c.json({ success: false, message: 'অ্যাকাউন্ট খুঁজে পাওয়া যায়নি।' }, 404);
+  }
+
+  if (userRow.passwordHash && userRow.passwordSalt) {
+    const valid = await verifyPassword(currentPassword, userRow.passwordSalt, userRow.passwordHash);
+    if (!currentPassword || !valid) {
+      return c.json({ success: false, message: 'বর্তমান পাসওয়ার্ড সঠিক নয়।' }, 400);
+    }
+  }
+
+  const { salt, hash } = await hashPassword(newPassword);
+  await db
+    .update(users)
+    .set({
+      passwordHash: hash,
+      passwordSalt: salt,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(users.id, userRow.id));
+
+  return c.json({ success: true, message: 'পাসওয়ার্ড সফলভাবে আপডেট করা হয়েছে!' });
 });
 
 // Admin Login -> returns signed HS256 JWT

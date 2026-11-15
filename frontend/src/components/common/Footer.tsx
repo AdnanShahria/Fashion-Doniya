@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { StorageService } from '../../services/storageService';
+import { api } from '../../services/api';
 import { 
   Phone, 
   Mail, 
@@ -28,15 +29,42 @@ export const Footer: React.FC = () => {
     navigateTo('home');
   };
 
-  const handleSubscribe = (e: React.FormEvent) => {
+  const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newsletterEmail.trim()) {
-      showToast('নিউজলেটারে সফলভাবে সাবস্ক্রাইব করা হয়েছে!', 'success');
+    const cleanEmail = newsletterEmail.trim();
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      showToast('অনুগ্রহ করে সঠিক ইমেইল ঠিকানা প্রদান করুন।', 'error');
+      return;
+    }
+    try {
+      const res = await api.post('/newsletter/subscribe', { email: cleanEmail });
+      showToast(res.data?.message || 'নিউজলেটারে সফলভাবে সাবস্ক্রাইব করা হয়েছে!', 'success');
       setNewsletterEmail('');
-    } else {
-      showToast('অনুগ্রহ করে আপনার ইমেইল প্রদান করুন।', 'error');
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'সাবস্ক্রাইব করতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।';
+      showToast(msg, 'error');
     }
   };
+
+  const handleNavAction = (pageKey: string) => {
+    if (pageKey === 'shop-3-5') {
+      navigateTo('fabric-width', { width: '3.5' });
+    } else if (pageKey === 'shop-2-5') {
+      navigateTo('fabric-width', { width: '2.5' });
+    } else {
+      navigateTo(pageKey as any);
+    }
+  };
+
+  const activeFabricNavItems = (settings.navigationConfig?.footerFabricItems || [])
+    .filter((i) => i.isActive !== false)
+    .sort((a, b) => a.order - b.order);
+
+  const activeSupportNavItems = (settings.navigationConfig?.footerSupportItems || [])
+    .filter((i) => i.isActive !== false)
+    .sort((a, b) => a.order - b.order);
 
   const serviceFeatures = [
     {
@@ -182,41 +210,56 @@ export const Footer: React.FC = () => {
               ফেব্রিক সংগ্রহ
             </h3>
             <ul className="space-y-2 sm:space-y-2.5 text-xs sm:text-[13px] text-[#EDE5D9]/80">
-              <li>
-                <button onClick={() => navigateTo('fabric-width', { width: '3.5' })} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
-                  ৩.৫ বহর কাপড় (৫৬–৬০ ইঞ্চি)
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigateTo('fabric-width', { width: '2.5' })} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
-                  ২.৫ বহর কাপড় (৪২–৪৪ ইঞ্চি)
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigateTo('category-gallery', { width: '3.5', category: 'saree' })} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
-                  শাড়ির কাপড় কালেকশন
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigateTo('category-gallery', { width: '3.5', category: 'kamiz' })} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
-                  কামিজ ও কুর্তি ফেব্রিক
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigateTo('shop')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
-                  সকল প্রিমিয়াম থান কাপড়
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigateTo('calculator')} className="text-left hover:text-[#D5A64A] text-[#D5A64A] font-semibold transition-colors cursor-pointer">
-                  স্বয়ংক্রিয় গজ ক্যালকুলেটর →
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigateTo('custom-design')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
-                  কাস্টম ডিজাইন ও সাইজিং
-                </button>
-              </li>
+              {activeFabricNavItems.length > 0 ? (
+                activeFabricNavItems.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      onClick={() => handleNavAction(item.page)}
+                      className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer"
+                    >
+                      {item.label}
+                    </button>
+                  </li>
+                ))
+              ) : (
+                <>
+                  <li>
+                    <button onClick={() => navigateTo('fabric-width', { width: '3.5' })} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                      ৩.৫ বহর কাপড় (৫৬–৬০ ইঞ্চি)
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => navigateTo('fabric-width', { width: '2.5' })} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                      ২.৫ বহর কাপড় (৪২–৪৪ ইঞ্চি)
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => navigateTo('category-gallery', { width: '3.5', category: 'saree' })} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                      শাড়ির কাপড় কালেকশন
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => navigateTo('category-gallery', { width: '3.5', category: 'kamiz' })} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                      কামিজ ও কুর্তি ফেব্রিক
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => navigateTo('shop')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                      সকল প্রিমিয়াম থান কাপড়
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => navigateTo('calculator')} className="text-left hover:text-[#D5A64A] text-[#D5A64A] font-semibold transition-colors cursor-pointer">
+                      স্বয়ংক্রিয় গজ ক্যালকুলেটর →
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => navigateTo('custom-design')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                      কাস্টম ডিজাইন ও সাইজিং
+                    </button>
+                  </li>
+                </>
+              )}
             </ul>
           </div>
 
@@ -226,41 +269,56 @@ export const Footer: React.FC = () => {
               গ্রাহক সেবা ও গাইড
             </h3>
             <ul className="space-y-2 sm:space-y-2.5 text-xs sm:text-[13px] text-[#EDE5D9]/80">
-              <li>
-                <button onClick={() => navigateTo('order-tracking')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
-                  অর্ডার ট্র্যাকিং করুন
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigateTo('measurement-guide')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
-                  কাপড়ের বহর ও মাপের গাইড
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigateTo('faq')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
-                  সাধারণ জিজ্ঞাসা (FAQ)
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigateTo('delivery-policy')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
-                  ডেলিভারি পলিসি ও সময়সীমা
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigateTo('return-policy')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
-                  রিটার্ন ও রিফান্ড নীতি
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigateTo('terms')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
-                  শর্তাবলী ও নিয়মাবলী
-                </button>
-              </li>
-              <li>
-                <button onClick={() => navigateTo('privacy-policy')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
-                  গোপনীয়তা রক্ষা নীতি
-                </button>
-              </li>
+              {activeSupportNavItems.length > 0 ? (
+                activeSupportNavItems.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      onClick={() => handleNavAction(item.page)}
+                      className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer"
+                    >
+                      {item.label}
+                    </button>
+                  </li>
+                ))
+              ) : (
+                <>
+                  <li>
+                    <button onClick={() => navigateTo('order-tracking')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                      অর্ডার ট্র্যাকিং করুন
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => navigateTo('measurement-guide')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                      কাপড়ের বহর ও মাপের গাইড
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => navigateTo('faq')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                      সাধারণ জিজ্ঞাসা (FAQ)
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => navigateTo('delivery-policy')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                      ডেলিভারি পলিসি ও সময়সীমা
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => navigateTo('return-policy')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                      রিটার্ন ও রিফান্ড নীতি
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => navigateTo('terms')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                      শর্তাবলী ও নিয়মাবলী
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => navigateTo('privacy-policy')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                      গোপনীয়তা রক্ষা নীতি
+                    </button>
+                  </li>
+                </>
+              )}
             </ul>
           </div>
 
@@ -327,7 +385,7 @@ export const Footer: React.FC = () => {
 
         {/* 3. Bottom Bar: Copyright & Payment Methods */}
         <div className="pt-6 sm:pt-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left text-xs text-[#EDE5D9]/80">
-          <p>© {new Date().getFullYear()} Fashion Doniya BD. সর্বস্বত্ব সংরক্ষিত।</p>
+          <p>{settings.contentConfig?.footerContent?.copyrightText || `© ${new Date().getFullYear()} ${settings.storeName || 'Fashion Doniya BD'}. সর্বস্বত্ব সংরক্ষিত।`}</p>
           <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 text-xs text-[#EDE5D9]/85">
             <span className="text-[#D5A64A] font-semibold">পেমেন্ট সুবিধা:</span>
             <span className="px-2 py-0.5 rounded bg-[#351317] border border-[#48191E]">ক্যাশ অন ডেলিভারি</span>

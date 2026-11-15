@@ -38,12 +38,13 @@ const AllProductCard: React.FC<AllProductCardProps> = ({ product }) => {
     return [product.color || 'ডিফল্ট রং'];
   }, [product.availableColors, product.color]);
 
-  const [selectedYards, setSelectedYards] = useState<number>(1);
+  const [selectedYards, setSelectedYards] = useState<number>(product.minOrderQuantity || 1);
   const [selectedColor, setSelectedColor] = useState<string>(colorOptions[0]);
+  const isOutOfStock = product.stockYards <= 0;
 
   useEffect(() => {
-    setSelectedYards(1);
-  }, [product.id]);
+    setSelectedYards(product.minOrderQuantity || 1);
+  }, [product.id, product.minOrderQuantity]);
 
   useEffect(() => {
     if (!colorOptions.includes(selectedColor)) {
@@ -269,18 +270,20 @@ const AllProductCard: React.FC<AllProductCardProps> = ({ product }) => {
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
+              disabled={isOutOfStock}
               onClick={() => addToCart(product, selectedYards, selectedColor)}
-              className="min-h-[38px] py-2 px-2.5 rounded-xl bg-[#FAF3E8] hover:bg-[#F1E3CE] active:scale-[0.98] text-[#6B0812] border border-[#DFC9AA] hover:border-[#C59B48] text-xs font-semibold transition-all duration-200 cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
+              className="min-h-[38px] py-2 px-2.5 rounded-xl bg-[#FAF3E8] hover:bg-[#F1E3CE] disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] text-[#6B0812] border border-[#DFC9AA] hover:border-[#C59B48] text-xs font-semibold transition-all duration-200 cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
             >
-              কার্টে যোগ
+              {isOutOfStock ? 'স্টক শেষ' : 'কার্টে যোগ'}
             </button>
 
             <button
               type="button"
+              disabled={isOutOfStock}
               onClick={() => buyNow(product, selectedYards, selectedColor)}
-              className="min-h-[38px] py-2 px-2.5 rounded-xl bg-gradient-to-b from-[#7D0A15] to-[#63060F] hover:from-[#8C0C18] hover:to-[#53050D] active:scale-[0.98] text-white text-xs font-semibold shadow-[0_3px_10px_rgba(107,8,18,0.18),inset_0_1px_0_rgba(255,255,255,0.16)] transition-all duration-200 cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
+              className="min-h-[38px] py-2 px-2.5 rounded-xl bg-gradient-to-b from-[#7D0A15] to-[#63060F] hover:from-[#8C0C18] hover:to-[#53050D] disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] text-white text-xs font-semibold shadow-[0_3px_10px_rgba(107,8,18,0.18),inset_0_1px_0_rgba(255,255,255,0.16)] transition-all duration-200 cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
             >
-              এখনই কিনুন
+              {isOutOfStock ? 'অপ্রাপ্য' : 'এখনই কিনুন'}
             </button>
           </div>
         </div>

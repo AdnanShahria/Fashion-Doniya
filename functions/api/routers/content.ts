@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { desc, eq } from 'drizzle-orm';
 import type { AppEnv } from '../types';
 import { contactMessages, customDesignRequests } from '../../../backend/server/db/schemas/index';
-import { appendAdminLog, normalizePhone, safeJsonParse } from '../utils/helpers';
+import { appendAdminLog, normalizePhone, safeJsonParse, escapeHtml, safeWaitUntil } from '../utils/helpers';
 import { sendTransactionalEmail } from '../utils/email';
 
 export const contentRouter = new Hono<AppEnv>();
@@ -13,18 +13,23 @@ contentRouter.post('/contact-messages', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const name = String(body.name || '').trim();
   const phone = normalizePhone(String(body.phone || ''));
-  const message = String(body.message || '').trim();
+  const subject = String(body.subject || '').trim();
+  const rawMessage = String(body.message || '').trim();
 
-  if (!name || !phone || !message) {
+  if (!name || !phone || !rawMessage) {
     return c.json({ success: false, message: 'নাম, মোবাইল নম্বর এবং বার্তা আবশ্যক।' }, 400);
   }
+  if (phone.length < 10) {
+    return c.json({ success: false, message: 'সঠিক মোবাইল নম্বর প্রদান করুন।' }, 400);
+  }
 
+  const storedMessage = subject ? `[বিষয়: ${subject}] ${rawMessage}` : rawMessage;
   const db = c.get('db');
   const record = {
     id: `msg-${Date.now()}`,
     name,
     phone,
-    message,
+    message: storedMessage,
     status: 'unread',
     createdAt: new Date().toISOString(),
   };
@@ -33,7 +38,7 @@ contentRouter.post('/contact-messages', async (c) => {
     db,
     `নতুন যোগাযোগ বার্তা (${name})`,
     'content',
-    `ফোন: ${phone} · বার্তা: ${message.slice(0, 60)}`,
+    `ফোন: ${phone} · বার্তা: ${storedMessage.slice(0, 60)}`,
     'Customer'
   );
 
@@ -44,18 +49,17 @@ contentRouter.post('/contact-messages', async (c) => {
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 550px; background: #FAF6F0; padding: 20px; border-radius: 8px; color: #241614;">
         <h3 style="color: #6B0812; margin-top: 0;">নতুন ওয়েবসাইট যোগাযোগ বার্তা</h3>
-        <p><strong>প্রেরক:</strong> ${name}</p>
-        <p><strong>মোবাইল:</strong> <a href="tel:${phone}">${phone}</a></p>
+        <p><strong>প্রেরক:</strong> ${escapeHtml(name)}</p>
+        <p><strong>মোবাইল:</strong> <a href="tel:${escapeHtml(phone)}">${escapeHtml(phone)}</a></p>
+        ${subject ? `<p><strong>বিষয়:</strong> ${escapeHtml(subject)}</p>` : ''}
         <div style="background: #FFFFFF; padding: 12px; border-radius: 6px; border: 1px solid #E6D8C5; margin-top: 12px;">
-          <p style="margin: 0; font-size: 13px; line-height: 1.5;">${message}</p>
+          <p style="margin: 0; font-size: 13px; line-height: 1.5;">${escapeHtml(rawMessage)}</p>
         </div>
       </div>
     `,
   }).catch(() => {});
 
-  if (c.executionCtx?.waitUntil) {
-    c.executionCtx.waitUntil(emailPromise);
-  }
+  safeWaitUntil(c, emailPromise);
 
   return c.json({ success: true, record }, 201);
 });

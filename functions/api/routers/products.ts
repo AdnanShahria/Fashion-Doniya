@@ -44,7 +44,7 @@ adminProductsRouter.post('/', async (c) => {
 
   const record = {
     id: product.id,
-    slug: existing?.slug || product.id || slugify(product.nameEn || product.name),
+    slug: existing?.slug || slugify(product.nameEn || product.name) || product.id,
     name: product.name,
     nameEn: product.nameEn || null,
     description: product.description || '',
@@ -125,6 +125,10 @@ adminProductsRouter.put('/:id', async (c) => {
   const merged: Product = { ...mapProductRow(existing), ...updates, id };
   const now = new Date().toISOString();
 
+  const nextPricePerYard = Math.max(0, Number(merged.pricePerYard));
+  const nextDiscountPrice =
+    merged.discountPrice != null ? Math.max(0, Number(merged.discountPrice)) : null;
+
   await db
     .update(products)
     .set({
@@ -139,8 +143,8 @@ adminProductsRouter.put('/:id', async (c) => {
       color: merged.color,
       colorHex: merged.colorHex || null,
       availableColors: JSON.stringify(merged.availableColors || []),
-      pricePerYard: Math.max(0, Number(merged.pricePerYard)),
-      discountPrice: merged.discountPrice != null ? Math.max(0, Number(merged.discountPrice)) : null,
+      pricePerYard: nextPricePerYard,
+      discountPrice: nextDiscountPrice,
       stockYards: Math.max(0, Number(merged.stockYards)),
       minOrderQuantity: Math.max(0.25, Number(merged.minOrderQuantity)),
       stepYard: Math.max(0.25, Number(merged.stepYard)),
@@ -161,6 +165,19 @@ adminProductsRouter.put('/:id', async (c) => {
     })
     .where(eq(products.id, id));
 
+  if (
+    existing.pricePerYard !== nextPricePerYard ||
+    (existing.discountPrice ?? null) !== nextDiscountPrice
+  ) {
+    await db.insert(productPriceHistory).values({
+      id: `pph-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      productId: id,
+      pricePerYard: nextPricePerYard,
+      discountPrice: nextDiscountPrice,
+      recordedAt: now,
+    });
+  }
+
   await appendAdminLog(db, `পণ্য সম্পাদনা: ${merged.name}`, 'product', `SKU: ${merged.sku} আপডেট করা হয়েছে`);
   await invalidateHomeCache(c.env);
   clearBulkMicroCache();
@@ -173,15 +190,16 @@ adminProductsRouter.delete('/:id', async (c) => {
   const id = c.req.param('id');
   const db = c.get('db');
   const existing = await db.select().from(products).where(eq(products.id, id)).get();
-  await db.delete(products).where(eq(products.id, id));
-  if (existing) {
-    await appendAdminLog(
-      db,
-      `পণ্য মুছে ফেলা হয়েছে: ${existing.name}`,
-      'product',
-      `SKU: ${existing.sku} ডাটাবেস থেকে মুছে ফেলা হয়েছে`
-    );
+  if (!existing) {
+    return c.json({ success: false, message: 'পণ্যটি খুঁজে পাওয়া যায়নি।' }, 404);
   }
+  await db.delete(products).where(eq(products.id, id));
+  await appendAdminLog(
+    db,
+    `পণ্য মুছে ফেলা হয়েছে: ${existing.name}`,
+    'product',
+    `SKU: ${existing.sku} ডাটাবেস থেকে মুছে ফেলা হয়েছে`
+  );
   await invalidateHomeCache(c.env);
   clearBulkMicroCache();
   const allProducts = await getAllProductsList(db);

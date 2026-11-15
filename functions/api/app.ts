@@ -282,13 +282,15 @@ app.use(
 
 app.use('/api/*', async (c, next) => {
   if (MUTATION_METHODS.has(c.req.method)) {
-    const secFetchSite = (c.req.header('sec-fetch-site') || '').toLowerCase();
-    if (secFetchSite === 'cross-site') {
-      return c.json({ success: false, message: 'Cross-site mutation blocked.' }, 403);
-    }
-
     const originHeader = c.req.header('origin');
     const refererHeader = c.req.header('referer');
+    const secFetchSite = (c.req.header('sec-fetch-site') || '').toLowerCase();
+    if (
+      secFetchSite === 'cross-site' &&
+      (!originHeader || !isAllowedStorefrontOrigin(originHeader, c.env))
+    ) {
+      return c.json({ success: false, message: 'Cross-site mutation blocked.' }, 403);
+    }
     if (originHeader && !isAllowedStorefrontOrigin(originHeader, c.env)) {
       return c.json({ success: false, message: 'Untrusted Origin blocked.' }, 403);
     }

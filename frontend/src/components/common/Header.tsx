@@ -41,6 +41,10 @@ export const Header: React.FC = () => {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    setSearchInput(searchQuery || '');
+  }, [searchQuery]);
+
+  useEffect(() => {
     const onScroll = () => {
       setIsScrolled(window.scrollY > 12);
     };
@@ -157,27 +161,29 @@ export const Header: React.FC = () => {
     .filter((item) => item.isActive !== false && item.page !== 'fabric-to-outfit' && item.label !== 'এআই আউটফিট')
     .sort((a, b) => a.order - b.order);
 
-  // Use custom navigation if Admin modified it via Navigation Management, otherwise preserve exact 10 links
-  const isCustomNavModified =
-    customHeaderItems.length > 0 &&
-    customHeaderItems.some((item) => item.id.startsWith('custom-nav-'));
-
-  const mainNavLinks = isCustomNavModified
-    ? customHeaderItems.map((item) => ({
-        label: item.label,
-        isHome: item.page === 'home',
-        isActive: currentPage === item.page,
-        onClick: () => {
-          if (item.page === 'shop-3-5') {
-            navigateTo('fabric-width', { width: '3.5' });
-          } else if (item.page === 'shop-2-5') {
-            navigateTo('fabric-width', { width: '2.5' });
-          } else {
-            navigateTo(item.page);
+  // Use custom navigation whenever Admin configured headerItems, otherwise use default 10 links
+  const mainNavLinks =
+    customHeaderItems.length > 0
+      ? customHeaderItems.map((item) => ({
+          label: item.label,
+          isHome: item.page === 'home',
+          isActive:
+            item.page === 'shop-3-5'
+              ? currentPage === 'fabric-width' && selectedWidthFilter === '3.5'
+              : item.page === 'shop-2-5'
+              ? currentPage === 'fabric-width' && selectedWidthFilter === '2.5'
+              : currentPage === item.page,
+          onClick: () => {
+            if (item.page === 'shop-3-5') {
+              navigateTo('fabric-width', { width: '3.5' });
+            } else if (item.page === 'shop-2-5') {
+              navigateTo('fabric-width', { width: '2.5' });
+            } else {
+              navigateTo(item.page);
+            }
           }
-        }
-      }))
-    : defaultMainNavLinks;
+        }))
+      : defaultMainNavLinks;
 
   const renderCategorySectionMenu = (closeMenu: () => void) => (
     <div className="space-y-3.5 text-[#241614]">
@@ -331,7 +337,7 @@ export const Header: React.FC = () => {
           <button
             type="button"
             onClick={() => {
-              navigateTo('category-gallery', { width: '3.5', category: 'short-kamiz' });
+              navigateTo('custom-design');
               closeMenu();
             }}
             className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-[#FDFBF7] hover:bg-[#FAF2E6] border border-[#E6D8C5] shadow-[0_2px_6px_rgba(107,8,18,0.04)] transition-all cursor-pointer group text-left"

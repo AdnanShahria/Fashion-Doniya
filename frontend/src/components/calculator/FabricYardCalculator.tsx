@@ -78,12 +78,34 @@ export const FabricYardCalculator: React.FC<FabricYardCalculatorProps> = ({
       showToast('অনুগ্রহ করে একটি কাপড় নির্বাচন করুন', 'info');
       return;
     }
+    if (chosenProduct.stockYards <= 0) {
+      showToast(`দুঃখিত, "${chosenProduct.name}" বর্তমানে স্টক শেষ!`, 'error');
+      return;
+    }
+    if (calculation.totalYards > chosenProduct.stockYards) {
+      showToast(
+        `দুঃখিত, এই কাপড়টির সর্বোচ্চ ${toBengaliNumber(chosenProduct.stockYards)} গজ স্টকে আছে!`,
+        'error'
+      );
+      return;
+    }
     addToCart(chosenProduct, calculation.totalYards);
   };
 
   const handleBuyNowCalculated = () => {
     if (!chosenProduct) {
       showToast('অনুগ্রহ করে একটি কাপড় নির্বাচন করুন', 'info');
+      return;
+    }
+    if (chosenProduct.stockYards <= 0) {
+      showToast(`দুঃখিত, "${chosenProduct.name}" বর্তমানে স্টক শেষ!`, 'error');
+      return;
+    }
+    if (calculation.totalYards > chosenProduct.stockYards) {
+      showToast(
+        `দুঃখিত, এই কাপড়টির সর্বোচ্চ ${toBengaliNumber(chosenProduct.stockYards)} গজ স্টকে আছে!`,
+        'error'
+      );
       return;
     }
     buyNow(chosenProduct, calculation.totalYards);
@@ -394,18 +416,28 @@ export const FabricYardCalculator: React.FC<FabricYardCalculatorProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2.5 pt-1 min-w-0">
               <button
                 type="button"
+                disabled={!!chosenProduct && chosenProduct.stockYards <= 0}
                 onClick={handleAddToCartCalculated}
-                className="w-full min-h-[44px] py-2.5 px-3 bg-[#FFFDF9] hover:bg-[#FAF3E8] active:scale-[0.99] border border-[#6B0812] text-[#6B0812] rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
+                className="w-full min-h-[44px] py-2.5 px-3 bg-[#FFFDF9] hover:bg-[#FAF3E8] disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] border border-[#6B0812] text-[#6B0812] rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
               >
-                <span>কার্টে যোগ করুন ({toBengaliNumber(calculation.totalYards)} গজ)</span>
+                <span>
+                  {chosenProduct && chosenProduct.stockYards <= 0
+                    ? 'স্টক শেষ'
+                    : `কার্টে যোগ করুন (${toBengaliNumber(calculation.totalYards)} গজ)`}
+                </span>
               </button>
 
               <button
                 type="button"
+                disabled={!!chosenProduct && chosenProduct.stockYards <= 0}
                 onClick={handleBuyNowCalculated}
-                className="w-full min-h-[44px] py-2.5 px-3 bg-gradient-to-b from-[#7D0A15] to-[#63060F] hover:from-[#8C0C18] hover:to-[#53050D] active:scale-[0.99] text-white rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-[0_6px_16px_-4px_rgba(107,8,18,0.32),inset_0_1px_0_rgba(255,255,255,0.18)] text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
+                className="w-full min-h-[44px] py-2.5 px-3 bg-gradient-to-b from-[#7D0A15] to-[#63060F] hover:from-[#8C0C18] hover:to-[#53050D] disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] text-white rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-[0_6px_16px_-4px_rgba(107,8,18,0.32),inset_0_1px_0_rgba(255,255,255,0.18)] text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
               >
-                <span>অর্ডার করুন (৳{toBengaliNumber(estimatedCost)})</span>
+                <span>
+                  {chosenProduct && chosenProduct.stockYards <= 0
+                    ? 'বর্তমানে অপ্রাপ্য'
+                    : `অর্ডার করুন (৳${toBengaliNumber(estimatedCost)})`}
+                </span>
               </button>
             </div>
 

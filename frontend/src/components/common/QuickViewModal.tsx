@@ -21,7 +21,7 @@ export const QuickViewModal: React.FC = () => {
 
   useEffect(() => {
     if (quickViewProduct) {
-      setYards(1.0);
+      setYards(Math.max(1.0, quickViewProduct.minOrderQuantity || 1.0));
       setSelectedColor(quickViewProduct.color);
     }
   }, [quickViewProduct]);
@@ -45,9 +45,11 @@ export const QuickViewModal: React.FC = () => {
   const effectivePrice = quickViewProduct.discountPrice || quickViewProduct.pricePerYard;
   const totalPrice = Math.round(effectivePrice * yards);
   const isWishlisted = isInWishlist(quickViewProduct.id);
+  const isOutOfStock = quickViewProduct.stockYards <= 0;
+  const yardStep = quickViewProduct.stepYard || 0.5;
 
   const handleYardChange = (delta: number) => {
-    const min = 1.0;
+    const min = Math.max(0.5, quickViewProduct.minOrderQuantity || 1.0);
     const nextVal = Number((yards + delta).toFixed(2));
     if (nextVal >= min && nextVal <= quickViewProduct.stockYards) {
       setYards(nextVal);
@@ -193,9 +195,10 @@ export const QuickViewModal: React.FC = () => {
                 <div className="flex items-center border border-[#DFC9AA] bg-[#FFFDF9] rounded-xl p-0.5">
                   <button
                     type="button"
-                    onClick={() => handleYardChange(-0.5)}
+                    disabled={isOutOfStock}
+                    onClick={() => handleYardChange(-yardStep)}
                     aria-label="গজ কমান"
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-[#6B0812] hover:bg-[#FAF3E8] active:bg-[#EFE2CE] transition-colors cursor-pointer"
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-[#6B0812] hover:bg-[#FAF3E8] active:bg-[#EFE2CE] disabled:opacity-40 transition-colors cursor-pointer"
                   >
                     <Minus className="w-3.5 h-3.5" />
                   </button>
@@ -204,9 +207,10 @@ export const QuickViewModal: React.FC = () => {
                   </span>
                   <button
                     type="button"
-                    onClick={() => handleYardChange(0.5)}
+                    disabled={isOutOfStock}
+                    onClick={() => handleYardChange(yardStep)}
                     aria-label="গজ বাড়ান"
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-[#6B0812] hover:bg-[#FAF3E8] active:bg-[#EFE2CE] transition-colors cursor-pointer"
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-[#6B0812] hover:bg-[#FAF3E8] active:bg-[#EFE2CE] disabled:opacity-40 transition-colors cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
@@ -227,26 +231,28 @@ export const QuickViewModal: React.FC = () => {
             <div className="grid grid-cols-2 gap-2.5">
               <button
                 type="button"
+                disabled={isOutOfStock}
                 onClick={() => {
                   addToCart(quickViewProduct, yards, selectedColor);
                   closeQuickView();
                 }}
-                className="min-h-[44px] py-2.5 px-3 bg-[#FAF3E8] hover:bg-[#F1E3CE] border border-[#DFC9AA] text-[#6B0812] rounded-xl text-xs sm:text-sm font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
+                className="min-h-[44px] py-2.5 px-3 bg-[#FAF3E8] hover:bg-[#F1E3CE] disabled:opacity-50 disabled:cursor-not-allowed border border-[#DFC9AA] text-[#6B0812] rounded-xl text-xs sm:text-sm font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
               >
                 <ShoppingBag className="w-4 h-4" />
-                <span>কার্টে যোগ করুন</span>
+                <span>{isOutOfStock ? 'স্টক শেষ' : 'কার্টে যোগ করুন'}</span>
               </button>
 
               <button
                 type="button"
+                disabled={isOutOfStock}
                 onClick={() => {
                   buyNow(quickViewProduct, yards, selectedColor);
                   closeQuickView();
                 }}
-                className="min-h-[44px] py-2.5 px-3 bg-gradient-to-b from-[#7D0A15] to-[#63060F] hover:from-[#8C0C18] hover:to-[#53050D] text-white rounded-xl text-xs sm:text-sm font-bold shadow-[0_6px_16px_-4px_rgba(107,8,18,0.32),inset_0_1px_0_rgba(255,255,255,0.18)] transition-all flex items-center justify-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
+                className="min-h-[44px] py-2.5 px-3 bg-gradient-to-b from-[#7D0A15] to-[#63060F] hover:from-[#8C0C18] hover:to-[#53050D] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs sm:text-sm font-bold shadow-[0_6px_16px_-4px_rgba(107,8,18,0.32),inset_0_1px_0_rgba(255,255,255,0.18)] transition-all flex items-center justify-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
               >
                 <Zap className="w-4 h-4 text-[#F3D8A4]" />
-                <span>সরাসরি কিনুন</span>
+                <span>{isOutOfStock ? 'অপ্রাপ্য' : 'সরাসরি কিনুন'}</span>
               </button>
             </div>
 

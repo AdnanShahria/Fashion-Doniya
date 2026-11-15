@@ -97,7 +97,11 @@ api.interceptors.response.use(
             detail: { message: error?.response?.data?.message || 'সেশন মেয়াদ শেষ হয়েছে, অনুগ্রহ করে পুনরায় লগইন করুন।' },
           })
         );
-      } else if (status === 403 && error?.response?.data?.code === 'DEMO_MODE_ACTIVE') {
+      } else if (
+        status === 403 &&
+        (error?.response?.data?.code === 'DEMO_MODE_READ_ONLY' ||
+          error?.response?.data?.code === 'DEMO_MODE_ACTIVE')
+      ) {
         window.dispatchEvent(
           new CustomEvent('admin-api-error', {
             detail: { message: error.response.data.message || 'ডেমো মোড সক্রিয় থাকায় পরিবর্তন সংরক্ষণ করা যায়নি।' },

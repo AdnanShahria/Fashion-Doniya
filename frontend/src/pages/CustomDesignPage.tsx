@@ -212,11 +212,8 @@ export const CustomDesignPage: React.FC = () => {
     setSelectedColor(product.color);
   }, [product?.id]);
 
-  if (!product) {
-    return null;
-  }
-
   const productFabricImage = useMemo(() => {
+    if (!product) return '';
     const customUploads = (product.images || []).filter(
       (img) =>
         img.startsWith('http://') ||
@@ -228,8 +225,8 @@ export const CustomDesignPage: React.FC = () => {
     return getUniqueProductFabricImage(product);
   }, [product]);
 
-  const effectivePrice = product.discountPrice || product.pricePerYard;
-  const hasDiscount = !!product.discountPrice && product.discountPrice < product.pricePerYard;
+  const effectivePrice = product ? (product.discountPrice || product.pricePerYard) : 0;
+  const hasDiscount = !!product?.discountPrice && product.discountPrice < (product?.pricePerYard || 0);
 
   const extraAddonYards = useMemo(() => {
     let sum = 0;
@@ -244,12 +241,6 @@ export const CustomDesignPage: React.FC = () => {
 
   const combinedTotalYards = Number((yards + extraAddonYards).toFixed(2));
 
-  const mainFabricBreakdown = measurementService.calculateCustomFabricPrice(
-    product,
-    yards,
-    customConfig
-  );
-
   const addonTotalPrice = useMemo(() => {
     let sum = 0;
     for (const item of ADDITIONAL_CLOTHING_OPTIONS) {
@@ -263,6 +254,16 @@ export const CustomDesignPage: React.FC = () => {
     }
     return sum;
   }, [additionalItemCounts, selectedAddonFabrics, effectivePrice]);
+
+  if (!product) {
+    return null;
+  }
+
+  const mainFabricBreakdown = measurementService.calculateCustomFabricPrice(
+    product,
+    yards,
+    customConfig
+  );
 
   const priceBreakdown = measurementService.calculateCustomFabricPrice(
     product,

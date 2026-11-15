@@ -20,21 +20,44 @@ export const ContactPage: React.FC = () => {
   const [subject, setSubject] = useState('পণ্য ও গজ মাপ সংক্রান্ত');
   const [message, setMessage] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [sending, setSending] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const digits = phone.replace(/\D/g, '');
     if (!name.trim() || !phone.trim() || !message.trim()) {
       showToast('সবগুলো ঘর পূরণ করুন', 'error');
       return;
     }
-    api.post('/contact-messages', {
-      name: name.trim(),
-      phone: phone.trim(),
-      subject,
-      message: message.trim()
-    }).catch(() => {});
-    setSubmitted(true);
-    showToast('আপনার বার্তাটি পাঠানো হয়েছে। শীঘ্রই আমরা যোগাযোগ করব।', 'success');
+    if (digits.length < 10) {
+      showToast('অনুগ্রহ করে সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন।', 'error');
+      return;
+    }
+    setSending(true);
+    try {
+      const res = await api.post('/contact-messages', {
+        name: name.trim(),
+        phone: phone.trim(),
+        subject,
+        message: message.trim()
+      });
+      if (res.data?.success) {
+        setSubmitted(true);
+        setName('');
+        setPhone('');
+        setMessage('');
+        showToast('আপনার বার্তাটি পাঠানো হয়েছে। শীঘ্রই আমরা যোগাযোগ করব।', 'success');
+      } else {
+        showToast(res.data?.message || 'বার্তা পাঠানো যায়নি। আবার চেষ্টা করুন।', 'error');
+      }
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'বার্তা পাঠাতে সমস্যা হয়েছে। অনুগ্রহ করে পরে আবার চেষ্টা করুন।';
+      showToast(msg, 'error');
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -192,10 +215,11 @@ export const ContactPage: React.FC = () => {
 
                 <button
                   type="submit"
-                  className="w-full sm:w-auto px-6 py-2.5 bg-[#242424] hover:bg-[#C5A46D] text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                  disabled={sending}
+                  className="w-full sm:w-auto px-6 py-2.5 bg-[#242424] hover:bg-[#C5A46D] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-md"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  <span>বার্তা পাঠান</span>
+                  <span>{sending ? 'পাঠানো হচ্ছে...' : 'বার্তা পাঠান'}</span>
                 </button>
               </form>
             )}

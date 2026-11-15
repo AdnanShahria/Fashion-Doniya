@@ -2,9 +2,10 @@ import { Hono, type Context } from 'hono';
 import { eq, or } from 'drizzle-orm';
 import type { AppEnv } from '../types';
 import { orders, trackings, courierInfo, orderItems, products, coupons } from '../../../backend/server/db/schemas/index';
-import type { Order, OrderStatus, PaymentStatus } from '../../../frontend/src/types/index';
+import type { AddonFabricOption, Order, OrderStatus, PaymentStatus } from '../../../frontend/src/types/index';
+import { INITIAL_ADDON_FABRIC_COLLECTIONS } from '../../../frontend/src/data/seedData';
 import { getAllOrdersHydrated, hydrateOrderRow, getStoreAndPaymentSettings } from '../utils/mappers';
-import { appendAdminLog, buildCourierTrackingUrl, normalizePhone, safeJsonParse } from '../utils/helpers';
+import { appendAdminLog, buildCourierTrackingUrl, escapeHtml, normalizePhone, safeJsonParse, safeWaitUntil } from '../utils/helpers';
 import { checkoutRateLimiter, pollingRateLimiter } from '../utils/rateLimiter';
 import { invalidateHomeCache } from '../utils/cache';
 import { clearBulkMicroCache } from './bulk';
@@ -120,6 +121,30 @@ async function handleVerifyAndTrackOrder(c: Context<AppEnv>) {
 ordersRouter.post('/verify', pollingRateLimiter, handleVerifyAndTrackOrder);
 ordersRouter.get('/track', pollingRateLimiter, handleVerifyAndTrackOrder);
 
+ordersRouter.get('/my', async (c) => {
+  const authUser = c.get('user');
+  if (!authUser) {
+    return c.json({ success: false, message: 'লগইন করা প্রয়োজন।' }, 401);
+  }
+  const db = c.get('db');
+  const all = await getAllOrdersHydrated(db);
+  const authPhone = authUser.phone ? normalizePhone(authUser.phone) : '';
+  const visibleOrders = all.orders.filter((ord) => {
+    const ordPhone = normalizePhone(ord.customer?.phone || '');
+    return (
+      (ord as unknown as { userId?: string }).userId === authUser.id ||
+      (Boolean(authPhone) && ordPhone === authPhone)
+    );
+  });
+  const visibleIds = new Set(visibleOrders.map((o) => o.id));
+  return c.json({
+    success: true,
+    orders: visibleOrders,
+    order_tracking_history: all.order_tracking_history.filter((t) => visibleIds.has(t.orderId)),
+    courier_information: all.courier_information.filter((ci) => visibleIds.has(ci.orderId)),
+  });
+});
+
 // Edge-safe SSE stream endpoint (emits an immediate heartbeat/snapshot and closes cleanly so Workers never hang)
 ordersRouter.get('/stream', pollingRateLimiter, async (c) => {
   const encoder = new TextEncoder();
@@ -190,60 +215,153 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
 
   const authUser = c.get('user');
 
-  // Security Hardening: Authoritative Server-Side Price & Total Calculation (Prevents Price Tampering)
+  // Security Hardening: Authoritative Server-Side Price, Stock & Total Calculation (Prevents Price Tampering)
+  const { settings } = await getStoreAndPaymentSettings(db);
   const allProds = await db.select().from(products);
   const prodMap = new Map(allProds.map((p) => [p.id, p]));
 
-  let verifiedSubtotal = 0;
-  const verifiedItems = orderData.items.map((item) => {
-    const prod = prodMap.get(item.productId);
-    const yards = Math.max(0.25, Number(item.yards || 1));
-    const pricePerYard = prod
-      ? Number(prod.discountPrice ?? prod.pricePerYard)
-      : Math.max(0, Number(item.pricePerYard || 0));
-
-    let addonTotal = 0;
-    if (Array.isArray(item.selectedAddons)) {
-      for (const addon of item.selectedAddons) {
-        const addonCost = Number(addon?.totalAddonPrice || 0);
-        if (addonCost > 0) {
-          addonTotal += addonCost;
-        }
+  const addonCollections = settings.addonFabricCollections || INITIAL_ADDON_FABRIC_COLLECTIONS;
+  const addonFabricMap = new Map<string, AddonFabricOption>();
+  for (const list of Object.values(addonCollections)) {
+    if (Array.isArray(list)) {
+      for (const opt of list) {
+        if (opt?.id) addonFabricMap.set(opt.id, opt);
       }
     }
+  }
 
-    const lineTotal = Math.round(pricePerYard * yards + addonTotal);
+  let verifiedSubtotal = 0;
+  const stockDeductions = new Map<string, number>();
+  const verifiedItems: Order['items'] = [];
+
+  for (const item of orderData.items) {
+    const prod = prodMap.get(item.productId);
+    if (!prod) {
+      return c.json(
+        { success: false, message: 'দুঃখিত, কার্টের একটি পণ্য আমাদের ডাটাবেসে পাওয়া যায়নি।' },
+        400
+      );
+    }
+    if (prod.isActive === false) {
+      return c.json(
+        { success: false, message: `দুঃখিত, "${prod.name}" পণ্যটি বর্তমানে বিক্রয়ের জন্য সক্রিয় নয়।` },
+        400
+      );
+    }
+
+    const requestedTotalYards = Math.max(0.25, Number(item.yards || 1));
+    const pricePerYard = Number(prod.discountPrice ?? prod.pricePerYard);
+
+    let addonTotal = 0;
+    let addonTotalYards = 0;
+    let setSameProductAddonYards = 0;
+    const verifiedAddons = Array.isArray(item.selectedAddons)
+      ? item.selectedAddons
+          .filter((a) => Number(a?.count || 0) > 0 && Number(a?.yardsPerUnit || 0) > 0)
+          .map((addon) => {
+            const count = Math.max(1, Math.min(20, Math.round(Number(addon.count))));
+            const yardsPerUnit = Math.max(0.25, Math.min(15, Number(addon.yardsPerUnit)));
+            const addonYards = Number((count * yardsPerUnit).toFixed(2));
+            addonTotalYards = Number((addonTotalYards + addonYards).toFixed(2));
+
+            const isSetFabric =
+              addon.addonId === 'orna' ||
+              !addon.fabricId ||
+              String(addon.fabricId).startsWith('set-') ||
+              !addonFabricMap.has(addon.fabricId);
+            const chosenFabric = !isSetFabric ? addonFabricMap.get(addon.fabricId) : undefined;
+            const unitRate = chosenFabric ? Number(chosenFabric.pricePerYard) : pricePerYard;
+            const totalAddonPrice = Math.round(addonYards * unitRate);
+            addonTotal += totalAddonPrice;
+            if (isSetFabric) {
+              setSameProductAddonYards = Number((setSameProductAddonYards + addonYards).toFixed(2));
+            }
+            return {
+              ...addon,
+              count,
+              yardsPerUnit,
+              pricePerYard: unitRate,
+              totalAddonPrice,
+            };
+          })
+      : undefined;
+
+    // Frontend packs combinedTotalYards = mainYards + addonTotalYards; separate cleanly to prevent double-charging
+    const mainYards =
+      addonTotalYards > 0 && requestedTotalYards > addonTotalYards + 0.01
+        ? Number((requestedTotalYards - addonTotalYards).toFixed(2))
+        : requestedTotalYards;
+
+    const customCfg = prod.customMeasurementConfig
+      ? safeJsonParse<{ standardGaj?: number; additionalPricePerYard?: number }>(
+          prod.customMeasurementConfig,
+          {}
+        )
+      : {};
+    const stdGaj = Number(customCfg.standardGaj || item.standardGaj || 0);
+    const extraRate = Number(customCfg.additionalPricePerYard || 0);
+    let mainFabricTotal = Math.round(pricePerYard * mainYards);
+    if (item.sizeMode === 'custom' && stdGaj > 0 && extraRate > 0 && mainYards > stdGaj) {
+      const extraYards = Number((mainYards - stdGaj).toFixed(2));
+      mainFabricTotal = Math.round(stdGaj * pricePerYard + extraYards * extraRate);
+    }
+
+    const boltYardsNeeded = Number((mainYards + setSameProductAddonYards).toFixed(2));
+    const cumulativeUsed = Number(((stockDeductions.get(prod.id) || 0) + boltYardsNeeded).toFixed(2));
+    if (prod.stockYards <= 0 || cumulativeUsed > prod.stockYards + 0.001) {
+      return c.json(
+        {
+          success: false,
+          message: `দুঃখিত, "${prod.name}"-এর পর্যাপ্ত স্টক নেই (মজুদ: ${prod.stockYards} গজ)।`,
+        },
+        400
+      );
+    }
+    stockDeductions.set(prod.id, cumulativeUsed);
+
+    const lineTotal = Math.round(mainFabricTotal + addonTotal);
     verifiedSubtotal += lineTotal;
 
-    return {
+    verifiedItems.push({
       ...item,
-      yards,
+      productName: prod.name,
+      yards: requestedTotalYards,
       pricePerYard,
+      selectedAddons: verifiedAddons && verifiedAddons.length > 0 ? verifiedAddons : undefined,
       finalProductPrice: lineTotal,
-    };
-  });
+    });
+  }
 
-  // Authoritative Delivery Charge Verification
+  // Authoritative Delivery Charge Verification using store settings
   const isInsideDhaka =
     normalizedCustomer.district?.trim().toLowerCase() === 'ঢাকা' ||
     normalizedCustomer.district?.trim().toLowerCase() === 'dhaka';
-  const defaultDeliveryFee = isInsideDhaka ? 80 : 150;
-  const verifiedDeliveryFee = verifiedSubtotal >= 2000 ? 0 : defaultDeliveryFee;
+  const insideFee = Number(settings.insideDhakaDeliveryFee ?? 80);
+  const outsideFee = Number(settings.outsideDhakaDeliveryFee ?? 150);
+  const freeThreshold = Number(settings.freeDeliveryThreshold ?? 2500);
+  const defaultDeliveryFee = isInsideDhaka ? insideFee : outsideFee;
+  const verifiedDeliveryFee = verifiedSubtotal >= freeThreshold ? 0 : defaultDeliveryFee;
 
-  // Authoritative Coupon Verification
+  // Authoritative Coupon Verification (active, expiry, usageLimit, minOrderAmount, maxDiscountAmount)
   let verifiedDiscount = 0;
+  let appliedDbCoupon: typeof coupons.$inferSelect | null = null;
   const couponCode = orderData.couponCode ? String(orderData.couponCode).trim().toUpperCase() : null;
   if (couponCode) {
     const foundCoupon = await db.select().from(coupons).where(eq(coupons.code, couponCode)).get();
     if (foundCoupon && foundCoupon.isActive) {
-      if (!foundCoupon.minOrderAmount || verifiedSubtotal >= foundCoupon.minOrderAmount) {
-        verifiedDiscount =
+      const notExpired = !foundCoupon.expiresAt || Date.parse(foundCoupon.expiresAt) > Date.now();
+      const underLimit = !foundCoupon.usageLimit || Number(foundCoupon.usedCount || 0) < foundCoupon.usageLimit;
+      if (notExpired && underLimit && (!foundCoupon.minOrderAmount || verifiedSubtotal >= foundCoupon.minOrderAmount)) {
+        const rawDiscount =
           foundCoupon.discountType === 'percentage'
             ? Math.round((verifiedSubtotal * foundCoupon.discountValue) / 100)
             : Math.min(verifiedSubtotal, foundCoupon.discountValue);
+        verifiedDiscount = foundCoupon.maxDiscountAmount
+          ? Math.min(rawDiscount, foundCoupon.maxDiscountAmount)
+          : rawDiscount;
+        appliedDbCoupon = foundCoupon;
       }
     } else {
-      const { settings } = await getStoreAndPaymentSettings(db);
       const cfgCoupon = (settings.coupons || []).find(
         (cp) => cp.code?.trim().toUpperCase() === couponCode && cp.isActive
       );
@@ -257,6 +375,9 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
   }
 
   const verifiedGrandTotal = Math.max(0, verifiedSubtotal + verifiedDeliveryFee - verifiedDiscount);
+  const authoritativeOrderStatus: OrderStatus = 'Pending';
+  const authoritativePaymentStatus: PaymentStatus =
+    (orderData.paymentMethod || 'cod') === 'cod' ? 'unpaid' : 'pending_verification';
 
   await db
     .insert(orders)
@@ -269,18 +390,25 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
       subtotal: verifiedSubtotal,
       deliveryCharge: verifiedDeliveryFee,
       discountAmount: verifiedDiscount,
-      couponCode,
+      couponCode: verifiedDiscount > 0 ? couponCode : null,
       totalAmount: verifiedGrandTotal,
       paymentMethod: orderData.paymentMethod || 'cod',
-      paymentStatus: orderData.paymentStatus || 'Pending',
+      paymentStatus: authoritativePaymentStatus,
       paymentDetails: orderData.paymentDetails ? JSON.stringify(orderData.paymentDetails) : null,
-      orderStatus: orderData.orderStatus || 'Pending',
+      orderStatus: authoritativeOrderStatus,
       estimatedDeliveryDate: orderData.estimatedDeliveryDate || null,
-      notes: orderData.customer?.deliveryNotes || null,
+      notes: normalizedCustomer.deliveryNotes || null,
       createdAt: orderData.createdAt || now,
       updatedAt: now,
     })
     .onConflictDoNothing();
+
+  if (appliedDbCoupon && verifiedDiscount > 0) {
+    await db
+      .update(coupons)
+      .set({ usedCount: Number(appliedDbCoupon.usedCount || 0) + 1 })
+      .where(eq(coupons.id, appliedDbCoupon.id));
+  }
 
   for (let idx = 0; idx < verifiedItems.length; idx++) {
     const item = verifiedItems[idx];
@@ -311,11 +439,12 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
         customization: customPayload ? JSON.stringify(customPayload) : null,
       })
       .onConflictDoNothing();
+  }
 
-    // Deduct stock yards gracefully (clamp at 0)
-    const prod = prodMap.get(item.productId);
+  for (const [prodId, usedYards] of stockDeductions.entries()) {
+    const prod = prodMap.get(prodId);
     if (prod) {
-      const nextStock = Math.max(0, Number((prod.stockYards - yards).toFixed(2)));
+      const nextStock = Math.max(0, Number((prod.stockYards - usedYards).toFixed(2)));
       await db
         .update(products)
         .set({ stockYards: nextStock, updatedAt: now })
@@ -329,7 +458,7 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
       id: `trk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       orderId: id,
       orderNumber,
-      status: orderData.orderStatus || 'Pending',
+      status: authoritativeOrderStatus,
       timestamp: now,
       note: 'অর্ডারটি সফলভাবে গৃহীত হয়েছে এবং ভেরিফিকেশনের জন্য প্রক্রিয়াধীন রয়েছে।',
       location: 'Fashion Doniya BD অনলাইন ডেস্ক, ঢাকা',
@@ -359,13 +488,13 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
             <p style="font-size: 12px; color: #8A5A10; margin-top: 4px;">কাপড়ের আভিজাত্য · ৩.৫ ও ২.৫ হাত বহর</p>
           </div>
           <div style="background: #FFFFFF; padding: 20px; border-radius: 8px; border: 1px solid #E6D8C5;">
-            <h3 style="color: #241614; margin-top: 0;">ধন্যবাদ, ${normalizedCustomer.fullName}!</h3>
+            <h3 style="color: #241614; margin-top: 0;">ধন্যবাদ, ${escapeHtml(normalizedCustomer.fullName)}!</h3>
             <p style="font-size: 14px; color: #523A35;">আপনার অর্ডারটি সফলভাবে গৃহীত হয়েছে। শীঘ্রই আমাদের প্রতিনিধি আপনার সাথে যোগাযোগ করবেন।</p>
             <div style="background: #FAF8F4; padding: 12px; border-radius: 6px; margin: 16px 0; border-left: 4px solid #6B0812;">
-              <p style="margin: 0; font-size: 13px;"><strong>অর্ডার নম্বর:</strong> ${orderNumber}</p>
-              <p style="margin: 4px 0 0; font-size: 13px;"><strong>পেমেন্ট মেথড:</strong> ${orderData.paymentMethod}</p>
+              <p style="margin: 0; font-size: 13px;"><strong>অর্ডার নম্বর:</strong> ${escapeHtml(orderNumber)}</p>
+              <p style="margin: 4px 0 0; font-size: 13px;"><strong>পেমেন্ট মেথড:</strong> ${escapeHtml(orderData.paymentMethod || 'cod')}</p>
               <p style="margin: 4px 0 0; font-size: 13px;"><strong>মোট মূল্য:</strong> ৳${verifiedGrandTotal}</p>
-              <p style="margin: 4px 0 0; font-size: 13px;"><strong>ডেলিভারি ঠিকানা:</strong> ${normalizedCustomer.fullAddress || ''}, ${normalizedCustomer.district}</p>
+              <p style="margin: 4px 0 0; font-size: 13px;"><strong>ডেলিভারি ঠিকানা:</strong> ${escapeHtml(normalizedCustomer.fullAddress || '')}, ${escapeHtml(normalizedCustomer.district || '')}</p>
             </div>
             <div style="text-align: center; margin-top: 24px;">
               <a href="https://fashiondoniyabd.com/order-tracking" style="display: inline-block; background: #6B0812; color: #FFFFFF; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 13px;">অর্ডার ট্র্যাক করুন</a>
@@ -378,9 +507,7 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
       `,
     }).catch(() => {});
 
-    if (c.executionCtx?.waitUntil) {
-      c.executionCtx.waitUntil(emailPromise);
-    }
+    safeWaitUntil(c, emailPromise);
   }
 
   // 2. Secondary Channel: Transactional SMS
@@ -400,9 +527,7 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
       isSecondaryFallback: !hasCustomerEmail,
     }).catch(() => {});
 
-    if (c.executionCtx?.waitUntil) {
-      c.executionCtx.waitUntil(smsPromise);
-    }
+    safeWaitUntil(c, smsPromise);
   }
 
   const row = await db.select().from(orders).where(eq(orders.id, id)).get();
@@ -413,49 +538,18 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
 ordersRouter.post('/sync-client', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { orders?: Order[] };
   const db = c.get('db');
-  const now = new Date().toISOString();
   const isAdmin = c.get('isAdmin');
   const authUser = c.get('user');
   const clientPairs: Array<{ orderNumber: string; phone: string }> = [];
 
   if (Array.isArray(body?.orders)) {
     for (const incoming of body.orders) {
-      if (!incoming?.id || !incoming?.orderNumber || !incoming?.customer?.phone) continue;
+      if (!incoming?.orderNumber || !incoming?.customer?.phone) continue;
       const cleanPhone = normalizePhone(incoming.customer.phone);
       clientPairs.push({
         orderNumber: incoming.orderNumber.toUpperCase(),
         phone: cleanPhone,
       });
-      const existing = await db
-        .select({ id: orders.id })
-        .from(orders)
-        .where(or(eq(orders.id, incoming.id), eq(orders.orderNumber, incoming.orderNumber)))
-        .get();
-      if (!existing && Array.isArray(incoming.items) && incoming.items.length > 0) {
-        await db.insert(orders).values({
-          id: incoming.id,
-          orderNumber: incoming.orderNumber,
-          userId: authUser?.id || null,
-          customer: JSON.stringify({
-            ...incoming.customer,
-            phone: cleanPhone,
-          }),
-          items: JSON.stringify(incoming.items || []),
-          subtotal: Math.max(0, Number(incoming.subtotal || 0)),
-          deliveryCharge: Math.max(0, Number(incoming.deliveryCharge || 0)),
-          discountAmount: Math.max(0, Number(incoming.discount || 0)),
-          couponCode: incoming.couponCode || null,
-          totalAmount: Math.max(0, Number(incoming.grandTotal || 0)),
-          paymentMethod: incoming.paymentMethod || 'cod',
-          paymentStatus: incoming.paymentStatus || 'Pending',
-          paymentDetails: incoming.paymentDetails ? JSON.stringify(incoming.paymentDetails) : null,
-          orderStatus: incoming.orderStatus || 'Pending',
-          estimatedDeliveryDate: incoming.estimatedDeliveryDate || null,
-          notes: incoming.customer?.deliveryNotes || null,
-          createdAt: incoming.createdAt || now,
-          updatedAt: incoming.updatedAt || now,
-        });
-      }
     }
   }
 
