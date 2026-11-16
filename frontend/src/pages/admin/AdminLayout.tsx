@@ -654,7 +654,7 @@ export const AdminLayout: React.FC = () => {
         </div>
       </header>
 
-      <div className="flex-1 flex max-w-[1440px] w-full mx-auto relative">
+      <div className="flex-1 flex max-w-360 w-full mx-auto relative">
         {/* Mobile Backdrop */}
         {sidebarOpen && (
           <div

@@ -13,7 +13,7 @@ ALLOWED_ORIGINS=http://127.0.0.1:8788,http://localhost:8788
 GEMINI_API_KEY=
 IMGBB_API_KEY=
 # Centralized Email Infrastructure (OrbitMail)
-ORBITMAIL_API_KEY=om_live_fashion-doniya_1386a21886583f41fb35394dec4f6527
+ORBITMAIL_API_KEY=
 ORBITMAIL_URL=https://mail.orbitsaas.cloud/api/v1/send
 ORBITMAIL_FROM=contact@orbitsaas.cloud
 

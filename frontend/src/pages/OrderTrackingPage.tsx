@@ -422,20 +422,21 @@ export const OrderTrackingPage: React.FC = () => {
                 আপনার শেষ অর্ডার ({lastCompletedOrder.orderNumber})
               </button>
             )}
-            {demoTestOrders.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  setOrderIdInput(item.id);
-                  setPhoneInput(item.phone);
-                  handleTrackOrder(item.id, item.phone);
-                }}
-                className="px-2 py-0.5 bg-[#FAF8F4] border border-[#EDE5D9] rounded-xs font-mono text-[#242424] hover:border-[#C5A46D] cursor-pointer"
-              >
-                {item.id} ({item.phone})
-              </button>
-            ))}
+            {import.meta.env.DEV &&
+              demoTestOrders.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    setOrderIdInput(item.id);
+                    setPhoneInput(item.phone);
+                    handleTrackOrder(item.id, item.phone);
+                  }}
+                  className="px-2 py-0.5 bg-[#FAF8F4] border border-[#EDE5D9] rounded-xs font-mono text-[#242424] hover:border-[#C5A46D] cursor-pointer"
+                >
+                  {item.id} ({item.phone})
+                </button>
+              ))}
           </div>
         </div>
       </div>
@@ -721,17 +722,18 @@ export const OrderTrackingPage: React.FC = () => {
                       )}
                     </span>
                   </div>
-                  {searchedOrder.courierInfo.trackingUrl && (
-                    <a
-                      href={searchedOrder.courierInfo.trackingUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-[#6B0812] hover:text-[#C5A46D] underline mt-1.5"
-                    >
-                      <span>কুরিয়ার পোর্টালে ট্র্যাক করুন</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  )}
+                  {searchedOrder.courierInfo.trackingUrl &&
+                    /^(https?:)?\/\//i.test(searchedOrder.courierInfo.trackingUrl) && (
+                      <a
+                        href={searchedOrder.courierInfo.trackingUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-[#6B0812] hover:text-[#C5A46D] underline mt-1.5"
+                      >
+                        <span>কুরিয়ার পোর্টালে ট্র্যাক করুন</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
                 </div>
               </div>
             ) : (

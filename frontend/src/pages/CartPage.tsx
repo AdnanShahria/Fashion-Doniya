@@ -36,14 +36,16 @@ export const CartPage: React.FC = () => {
   const [couponCode, setCouponCode] = useState(appliedCoupon?.code || '');
   const [deliveryLocation, setDeliveryLocation] = useState<'inside' | 'outside'>('inside');
 
-  const deliveryFee = deliveryLocation === 'inside' 
-    ? settings.insideDhakaDeliveryFee 
-    : settings.outsideDhakaDeliveryFee;
+  const deliveryFee = Number(
+    (deliveryLocation === 'inside'
+      ? settings?.insideDhakaDeliveryFee
+      : settings?.outsideDhakaDeliveryFee) ?? (deliveryLocation === 'inside' ? 80 : 150)
+  );
 
-  const isFreeDelivery = cartSubtotal >= (settings.freeDeliveryThreshold || 2500);
+  const isFreeDelivery = cartSubtotal >= Number(settings?.freeDeliveryThreshold ?? 2500);
   const effectiveDeliveryFee = isFreeDelivery ? 0 : deliveryFee;
 
-  const discountAmount = appliedCoupon ? appliedCoupon.discount : 0;
+  const discountAmount = appliedCoupon ? Number(appliedCoupon.discount || 0) : 0;
   const grandTotal = Math.max(0, cartSubtotal + effectiveDeliveryFee - discountAmount);
 
   const handleApplyCoupon = (e: React.FormEvent) => {

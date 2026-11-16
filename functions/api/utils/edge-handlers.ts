@@ -34,6 +34,25 @@ const MIME_MAP: Record<string, string> = {
   htm: 'text/html; charset=utf-8',
 };
 
+export function applyEdgeSecurityHeaders(
+  headersInit: HeadersInit | Record<string, string>,
+  isHtml = false
+): Headers {
+  const headers = new Headers(headersInit);
+  headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('X-Frame-Options', 'SAMEORIGIN');
+  headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+  if (isHtml) {
+    headers.set(
+      'Content-Security-Policy',
+      "default-src 'self' 'unsafe-inline' https: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; frame-ancestors 'self';"
+    );
+  }
+  return headers;
+}
+
 const PRIVATE_ROUTE_PREFIXES = [
   '/admin',
   '/sysadm',
@@ -154,6 +173,8 @@ export async function serveR2MediaRequest(
     headers.set('Content-Disposition', 'attachment');
     headers.set('Content-Security-Policy', "default-src 'none'; sandbox");
   }
+
+  applyEdgeSecurityHeaders(headers, false);
 
   if (request.method === 'HEAD') {
     return new Response(null, { status: 200, headers });
@@ -331,11 +352,14 @@ export async function renderProductSsrResponse(
     });
     return new Response(html404, {
       status: 404,
-      headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        'X-Robots-Tag': 'noindex, nofollow',
-        'Cache-Control': 'no-store',
-      },
+      headers: applyEdgeSecurityHeaders(
+        {
+          'Content-Type': 'text/html; charset=utf-8',
+          'X-Robots-Tag': 'noindex, nofollow',
+          'Cache-Control': 'no-store',
+        },
+        true
+      ),
     });
   }
 
@@ -440,11 +464,14 @@ export async function renderProductSsrResponse(
 
   return new Response(injected, {
     status: 200,
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'public, max-age=60, s-maxage=3600, stale-while-revalidate=86400',
-      Vary: 'Host, Accept-Encoding',
-    },
+    headers: applyEdgeSecurityHeaders(
+      {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'public, max-age=60, s-maxage=3600, stale-while-revalidate=86400',
+        Vary: 'Host, Accept-Encoding',
+      },
+      true
+    ),
   });
 }
 
@@ -495,11 +522,14 @@ export async function renderCategorySsrResponse(
     });
     return new Response(html404, {
       status: 404,
-      headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        'X-Robots-Tag': 'noindex, nofollow',
-        'Cache-Control': 'no-store',
-      },
+      headers: applyEdgeSecurityHeaders(
+        {
+          'Content-Type': 'text/html; charset=utf-8',
+          'X-Robots-Tag': 'noindex, nofollow',
+          'Cache-Control': 'no-store',
+        },
+        true
+      ),
     });
   }
 
@@ -594,11 +624,14 @@ export async function renderCategorySsrResponse(
 
   return new Response(injected, {
     status: 200,
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'public, max-age=60, s-maxage=3600, stale-while-revalidate=86400',
-      Vary: 'Host, Accept-Encoding',
-    },
+    headers: applyEdgeSecurityHeaders(
+      {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'public, max-age=60, s-maxage=3600, stale-while-revalidate=86400',
+        Vary: 'Host, Accept-Encoding',
+      },
+      true
+    ),
   });
 }
 
@@ -743,11 +776,14 @@ export async function renderStorefrontSsrResponse(
 
     return new Response(privateHtml, {
       status: 200,
-      headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        'X-Robots-Tag': 'noindex, nofollow',
-        'Cache-Control': 'no-store',
-      },
+      headers: applyEdgeSecurityHeaders(
+        {
+          'Content-Type': 'text/html; charset=utf-8',
+          'X-Robots-Tag': 'noindex, nofollow',
+          'Cache-Control': 'no-store',
+        },
+        true
+      ),
     });
   }
 
@@ -946,11 +982,14 @@ export async function renderStorefrontSsrResponse(
 
   return new Response(html, {
     status: 200,
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'public, max-age=60, s-maxage=3600, stale-while-revalidate=86400',
-      Vary: 'Host, Accept-Encoding',
-    },
+    headers: applyEdgeSecurityHeaders(
+      {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'public, max-age=60, s-maxage=3600, stale-while-revalidate=86400',
+        Vary: 'Host, Accept-Encoding',
+      },
+      true
+    ),
   });
 }
 

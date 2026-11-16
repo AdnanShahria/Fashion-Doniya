@@ -58,6 +58,38 @@ function toSeoFileNameBase(rawInput: string): string {
   );
 }
 
+export function detectRasterImageType(
+  bytes: Uint8Array
+): { ext: 'png' | 'jpg' | 'webp' | 'gif'; contentType: string } | null {
+  if (!bytes || bytes.length < 12) return null;
+  // PNG: 89 50 4E 47
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    return { ext: 'png', contentType: 'image/png' };
+  }
+  // JPEG: FF D8 FF
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return { ext: 'jpg', contentType: 'image/jpeg' };
+  }
+  // GIF: GIF87a or GIF89a (47 49 46 38)
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
+    return { ext: 'gif', contentType: 'image/gif' };
+  }
+  // WEBP: RIFF....WEBP (52 49 46 46 .... 57 45 42 50)
+  if (
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return { ext: 'webp', contentType: 'image/webp' };
+  }
+  return null;
+}
+
 export async function parseImageUploadRequest(
   c: Context<AppEnv>
 ): Promise<ParsedImagePayload | null> {
@@ -75,17 +107,6 @@ export async function parseImageUploadRequest(
     if (file && typeof file === 'object' && 'arrayBuffer' in file) {
       const f = file as File;
       bytes = new Uint8Array(await f.arrayBuffer());
-      contentType = f.type || 'image/png';
-      ext =
-        contentType.includes('jpeg') || contentType.includes('jpg')
-          ? 'jpg'
-          : contentType.includes('webp')
-            ? 'webp'
-            : contentType.includes('gif')
-              ? 'gif'
-              : contentType.includes('svg')
-                ? 'svg'
-                : 'png';
       const rawName = (f.name || 'fabric-image').replace(/\.[^.]+$/, '');
       fileNameBase = toSeoFileNameBase(nameHint || rawName);
     }
@@ -100,11 +121,8 @@ export async function parseImageUploadRequest(
       .replace(/\.[^.]+$/, '')
       .trim();
     fileNameBase = toSeoFileNameBase(rawName);
-    const match = rawDataUrl.match(/^data:image\/(png|jpeg|jpg|webp|gif|svg\+xml);base64,(.+)$/i);
+    const match = rawDataUrl.match(/^data:image\/(png|jpeg|jpg|webp|gif);base64,(.+)$/i);
     if (match) {
-      const rawSubtype = match[1].toLowerCase();
-      ext = rawSubtype === 'jpeg' ? 'jpg' : rawSubtype === 'svg+xml' ? 'svg' : rawSubtype;
-      contentType = `image/${rawSubtype}`;
       bytes = base64ToUint8Array(match[2]);
     }
   }
@@ -112,6 +130,14 @@ export async function parseImageUploadRequest(
   if (!bytes || bytes.length === 0) {
     return null;
   }
+
+  // Authoritative Magic-Byte Verification (Only allow raster images, block SVG/HTML XSS vectors)
+  const detected = detectRasterImageType(bytes);
+  if (!detected) {
+    return null;
+  }
+  contentType = detected.contentType;
+  ext = detected.ext;
 
   return {
     bytes,

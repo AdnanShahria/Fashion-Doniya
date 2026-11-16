@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { desc, eq } from 'drizzle-orm';
-import type { AppEnv } from '../types';
+import type { AppEnv, Bindings } from '../types';
 import {
   orders,
   users,
@@ -56,11 +56,9 @@ export function clearBulkMicroCache() {
   microCache.clear();
 }
 
-bulkRouter.get('/home', async (c) => {
-  const db = c.get('db');
-
-  const payload = await withCoalescedMicroCache('bulk:home', async () => {
-    const edgeCached = await getHomeCache<Record<string, unknown>>(c.env);
+export async function getBulkHomePayload(db: AppEnv['Variables']['db'], env?: Bindings) {
+  return await withCoalescedMicroCache('bulk:home', async () => {
+    const edgeCached = env ? await getHomeCache<Record<string, unknown>>(env) : null;
     if (edgeCached) {
       return { ...edgeCached, cached: true };
     }
@@ -96,10 +94,16 @@ bulkRouter.get('/home', async (c) => {
       generatedAt: new Date().toISOString(),
     };
 
-    await setHomeCache(c.env, freshPayload);
+    if (env) {
+      await setHomeCache(env, freshPayload);
+    }
     return freshPayload;
   });
+}
 
+bulkRouter.get('/home', async (c) => {
+  const db = c.get('db');
+  const payload = await getBulkHomePayload(db, c.env);
   return c.json(payload);
 });
 

@@ -68,8 +68,8 @@ export async function sendTransactionalSms(
   const greenwebToken = String(env?.GREENWEB_API_TOKEN || '').trim();
   if (greenwebToken) {
     try {
-      const url = `http://api.greenweb.com.bd/api.php?token=${encodeURIComponent(greenwebToken)}&to=${encodeURIComponent(cleanPhone)}&message=${encodeURIComponent(opts.message)}`;
-      const resp = await fetch(url);
+      const url = `https://api.greenweb.com.bd/api.php?token=${encodeURIComponent(greenwebToken)}&to=${encodeURIComponent(cleanPhone)}&message=${encodeURIComponent(opts.message)}`;
+      const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
       const text = await resp.text();
       if (resp.ok && !text.toLowerCase().includes('error')) {
         return { delivered: true, provider: 'greenweb', channel: 'secondary' };
@@ -84,8 +84,8 @@ export async function sendTransactionalSms(
   if (bulkKey) {
     try {
       const senderId = String(env?.BULKSMSBD_SENDER_ID || env?.SMS_SENDER_ID || '8809612...').trim();
-      const url = `http://bulksmsbd.net/api/smsapi?api_key=${encodeURIComponent(bulkKey)}&type=text&number=${encodeURIComponent(cleanPhone)}&senderid=${encodeURIComponent(senderId)}&message=${encodeURIComponent(opts.message)}`;
-      const resp = await fetch(url);
+      const url = `https://bulksmsbd.net/api/smsapi?api_key=${encodeURIComponent(bulkKey)}&type=text&number=${encodeURIComponent(cleanPhone)}&senderid=${encodeURIComponent(senderId)}&message=${encodeURIComponent(opts.message)}`;
+      const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
       if (resp.ok) {
         return { delivered: true, provider: 'bulksmsbd', channel: 'secondary' };
       }

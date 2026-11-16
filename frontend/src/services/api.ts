@@ -49,8 +49,23 @@ function isAdminApiPath(rawUrl: string): boolean {
     path === '/bulk/admin-stats' ||
     path.startsWith('/seo/ping') ||
     path.startsWith('/courier/sync') ||
-    path.startsWith('/system/upload-image')
+    path.startsWith('/system/upload-image') ||
+    (path.startsWith('/customers/sync') && Boolean(getAdminAuthToken()))
   );
+}
+
+function getSessionId(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    let sess = localStorage.getItem('fd_session_id');
+    if (!sess) {
+      sess = 'sess-' + Math.random().toString(36).slice(2, 10) + '-' + Date.now().toString(36);
+      localStorage.setItem('fd_session_id', sess);
+    }
+    return sess;
+  } catch {
+    return '';
+  }
 }
 
 api.interceptors.request.use((config) => {
@@ -59,6 +74,11 @@ api.interceptors.request.use((config) => {
 
   if (config.data instanceof FormData && config.headers) {
     delete config.headers['Content-Type'];
+  }
+
+  const sessId = getSessionId();
+  if (sessId && config.headers) {
+    config.headers['x-session-id'] = sessId;
   }
 
   if (isAdminRoute) {
@@ -100,6 +120,9 @@ api.interceptors.response.use(
       if (status === 401 && isAdminCall && relPath !== '/admin/auth/login') {
         try {
           localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+          localStorage.removeItem('fashion_doniya_orders');
+          localStorage.removeItem('fashion_doniya_order_tracking_history');
+          localStorage.removeItem('fashion_doniya_courier_information');
         } catch {
           // ignore
         }
@@ -114,8 +137,7 @@ api.interceptors.response.use(
         relPath !== '/auth/login' &&
         relPath !== '/auth/register' &&
         relPath !== '/auth/forgot-password' &&
-        relPath !== '/auth/reset-password' &&
-        relPath !== '/auth/me'
+        relPath !== '/auth/reset-password'
       ) {
         try {
           localStorage.removeItem(AUTH_STORAGE_KEY);

@@ -100,11 +100,14 @@ export const CheckoutPage: React.FC = () => {
   const totalYards = checkoutItems.reduce((sum, item) => sum + item.yards, 0);
 
   const isDhaka = district.trim().toLowerCase().includes('ঢাকা') || district.trim().toLowerCase().includes('dhaka');
-  const deliveryFee = isDhaka ? settings.insideDhakaDeliveryFee : settings.outsideDhakaDeliveryFee;
-  const isFreeDelivery = subtotal >= (settings.freeDeliveryThreshold || 2500);
+  const deliveryFee = Number(
+    (isDhaka ? settings?.insideDhakaDeliveryFee : settings?.outsideDhakaDeliveryFee) ??
+      (isDhaka ? 80 : 150)
+  );
+  const isFreeDelivery = subtotal >= Number(settings?.freeDeliveryThreshold ?? 2500);
   const effectiveDeliveryFee = isFreeDelivery ? 0 : deliveryFee;
 
-  const discountAmount = appliedCoupon ? appliedCoupon.discount : 0;
+  const discountAmount = appliedCoupon ? Number(appliedCoupon.discount || 0) : 0;
   const grandTotal = Math.max(0, subtotal + effectiveDeliveryFee - discountAmount);
 
   // Redirect if cart and buynow are both empty

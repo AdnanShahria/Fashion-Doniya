@@ -87,6 +87,7 @@ function isBlockedHost(rawHostname: string): boolean {
     host.endsWith('.localhost') ||
     host.endsWith('.local') ||
     host.endsWith('.internal') ||
+    host.includes('metadata') ||
     host === '0.0.0.0' ||
     host === '::1' ||
     host === '::' ||
@@ -107,10 +108,14 @@ function isBlockedHost(rawHostname: string): boolean {
       a === 10 ||
       (a === 192 && b === 168) ||
       (a === 169 && b === 254) ||
+      (a === 100 && b >= 64 && b <= 127) ||
       (a === 172 && b >= 16 && b <= 31)
     ) {
       return true;
     }
+  }
+  if (/^(0x[0-9a-f]+|\d+)$/i.test(ipv4Part)) {
+    return true;
   }
   return false;
 }
@@ -123,29 +128,41 @@ async function resolveImageData(
 
   if (trimmed.startsWith('data:')) {
     const match = trimmed.match(/^data:([^;]+);base64,(.+)$/);
-    if (match) return { mimeType: match[1], base64Data: match[2] };
+    if (match) {
+      const mime = match[1].toLowerCase();
+      if (mime.startsWith('image/') && !mime.includes('svg')) {
+        return { mimeType: match[1], base64Data: match[2] };
+      }
+      return null;
+    }
   }
 
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+  if (trimmed.startsWith('https://')) {
     try {
       const parsed = new URL(trimmed);
-      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      if (parsed.protocol !== 'https:') {
         return null;
       }
       if (isBlockedHost(parsed.hostname)) {
         return null;
       }
-      const resp = await fetch(parsed.toString());
+      const resp = await fetch(parsed.toString(), {
+        redirect: 'error',
+        signal: AbortSignal.timeout(8000),
+      });
       if (resp.ok) {
-        if (resp.url) {
-          const finalUrl = new URL(resp.url);
-          if (isBlockedHost(finalUrl.hostname)) {
-            return null;
-          }
+        const contentType = (resp.headers.get('content-type') || '').toLowerCase();
+        if (!contentType.startsWith('image/') || contentType.includes('svg')) {
+          return null;
+        }
+        const contentLength = Number(resp.headers.get('content-length') || 0);
+        if (contentLength > 5 * 1024 * 1024) {
+          return null;
         }
         const buf = new Uint8Array(await resp.arrayBuffer());
+        if (buf.length > 5 * 1024 * 1024) return null;
         return {
-          mimeType: resp.headers.get('content-type') || 'image/jpeg',
+          mimeType: contentType.split(';')[0].trim() || 'image/jpeg',
           base64Data: bytesToBase64(buf),
         };
       }
@@ -157,6 +174,7 @@ async function resolveImageData(
   const sanitized = trimmed.replace(/\s+/g, '');
   if (
     sanitized.length > 100 &&
+    sanitized.length <= 5 * 1024 * 1024 &&
     sanitized.length % 4 === 0 &&
     /^[A-Za-z0-9+/=]+$/.test(sanitized)
   ) {
@@ -167,15 +185,12 @@ async function resolveImageData(
 
 async function generateOutfitWithGeminiRest(
   env: Bindings,
-  fabricImage: string,
+  resolvedImage: { base64Data: string; mimeType: string },
   categoryKey: string
 ): Promise<string | null> {
   const apiKey = String(env?.GEMINI_API_KEY || '').trim();
   const cfg = AI_CATEGORY_CONFIGS[categoryKey];
   if (!apiKey || !cfg) return null;
-
-  const resolved = await resolveImageData(fabricImage);
-  if (!resolved) return null;
 
   try {
     const resp = await fetch(
@@ -183,14 +198,15 @@ async function generateOutfitWithGeminiRest(
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(15000),
         body: JSON.stringify({
           contents: [
             {
               parts: [
                 {
                   inlineData: {
-                    data: resolved.base64Data,
-                    mimeType: resolved.mimeType,
+                    data: resolvedImage.base64Data,
+                    mimeType: resolvedImage.mimeType,
                   },
                 },
                 { text: cfg.prompt },
@@ -241,17 +257,23 @@ aiRouter.post('/fabric-to-outfit', authRateLimiter, async (c) => {
     return c.json({ success: false, message: 'অনুগ্রহ করে একটি কাপড়ের ছবি প্রদান করুন।' }, 400);
   }
 
-  const keys =
+  const resolvedImage = await resolveImageData(fabricImage);
+  if (!resolvedImage) {
+    return c.json({ success: false, message: 'সঠিক ফরম্যাটের কাপড়ের ছবি প্রদান করুন (PNG, JPEG, WEBP)।' }, 400);
+  }
+
+  const rawKeys =
     Array.isArray(body.categories) && body.categories.length > 0
       ? body.categories
       : Object.keys(AI_CATEGORY_CONFIGS);
+  const keys = Array.from(new Set(rawKeys)).slice(0, 6);
 
   const designs = [];
   for (const catKey of keys) {
     const cfg = AI_CATEGORY_CONFIGS[catKey];
     if (!cfg) continue;
     const generatedImage = c.env?.GEMINI_API_KEY
-      ? await generateOutfitWithGeminiRest(c.env, fabricImage, catKey)
+      ? await generateOutfitWithGeminiRest(c.env, resolvedImage, catKey)
       : null;
     designs.push({
       id: `outfit-${catKey}-${Date.now()}`,
@@ -280,8 +302,13 @@ aiRouter.post('/fabric-to-outfit/single', authRateLimiter, async (c) => {
     return c.json({ success: false, message: 'কাপড়ের ছবি এবং সঠিক ক্যাটাগরি আবশ্যক।' }, 400);
   }
 
+  const resolved = await resolveImageData(body.fabricImage);
+  if (!resolved) {
+    return c.json({ success: false, message: 'সঠিক ফরম্যাটের কাপড়ের ছবি প্রদান করুন (PNG, JPEG, WEBP)।' }, 400);
+  }
+
   const generatedImage = c.env?.GEMINI_API_KEY
-    ? await generateOutfitWithGeminiRest(c.env, body.fabricImage, body.category)
+    ? await generateOutfitWithGeminiRest(c.env, resolved, body.category)
     : null;
 
   return c.json({

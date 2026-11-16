@@ -903,7 +903,7 @@ export const AdminSystemDiagnostics: React.FC = () => {
                     >
                       <Copy className="w-3.5 h-3.5" />
                     </button>
-                    {!uploadResult.url.startsWith('data:') && (
+                    {/^(https?:)?\/\//i.test(uploadResult.url) && (
                       <a
                         href={uploadResult.url}
                         target="_blank"

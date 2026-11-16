@@ -934,6 +934,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       selectedAddons: customization?.selectedAddons
     };
 
+    setAppliedCoupon(null);
     setBuyNowItem(buyItem);
     navigateTo('checkout');
   };
@@ -1200,6 +1201,26 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     (sum, item) => sum + (item.finalProductPrice ?? Math.round(item.pricePerYard * item.yards)),
     0
   );
+
+  useEffect(() => {
+    if (appliedCoupon && !buyNowItem) {
+      if (cart.length === 0) {
+        setAppliedCoupon(null);
+        return;
+      }
+      const res = settingsService.validateCoupon(appliedCoupon.code, cartSubtotal);
+      if (!res.isValid) {
+        setAppliedCoupon(null);
+        showToast(`সাবটোটাল পরিবর্তন হওয়ায় কুপন "${appliedCoupon.code}" বাতিল করা হয়েছে।`, 'info');
+      } else if (res.discountAmount !== appliedCoupon.discount) {
+        setAppliedCoupon({
+          code: appliedCoupon.code,
+          discount: res.discountAmount,
+          msg: res.message,
+        });
+      }
+    }
+  }, [cartSubtotal, cart.length, appliedCoupon?.code, appliedCoupon?.discount, buyNowItem]);
 
   return (
     <StoreContext.Provider value={{

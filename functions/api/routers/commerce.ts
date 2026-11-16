@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, ne } from 'drizzle-orm';
 import type { AppEnv } from '../types';
 import {
   addresses,
   walletTransactions,
   returns,
   orders,
+  products,
   loyaltyTiers,
   loyaltyRewards,
   userLoyalty,
@@ -118,6 +119,32 @@ returnsRouter.post('/', async (c) => {
     return c.json({ success: false, message: 'অর্ডার খুঁজে পাওয়া যায়নি।' }, 404);
   }
 
+  if (orderRow.orderStatus !== 'Delivered') {
+    return c.json(
+      {
+        success: false,
+        message: 'শুধুমাত্র ডেলিভারি সম্পন্ন হওয়া অর্ডারের ক্ষেত্রে রিটার্ন প্রযোজ্য।',
+      },
+      400
+    );
+  }
+
+  const existingReturn = await db
+    .select()
+    .from(returns)
+    .where(and(eq(returns.orderId, orderRow.id), ne(returns.status, 'rejected')))
+    .get();
+
+  if (existingReturn) {
+    return c.json(
+      {
+        success: false,
+        message: 'এই অর্ডারের জন্য ইতিমধ্যে একটি রিটার্ন অনুরোধ প্রক্রিয়াধীন আছে।',
+      },
+      400
+    );
+  }
+
   const orderCustomer = safeJsonParse<{ phone?: string }>(orderRow.customer, {});
   const userNormPhone = normalizePhone(user.phone || '');
   const orderNormPhone = normalizePhone(orderCustomer.phone || '');
@@ -133,7 +160,7 @@ returnsRouter.post('/', async (c) => {
   const refundAmount = Math.max(0, Math.min(safeRefund, orderRow.totalAmount));
 
   const now = new Date().toISOString();
-  const id = `ret-${Date.now()}`;
+  const id = `ret-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
   await db.insert(returns).values({
     id,
     orderId: orderRow.id,
@@ -188,16 +215,21 @@ reviewsRouter.get('/:productId', async (c) => {
 reviewsRouter.post('/', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const productId = String(body.productId || '').trim();
-  const authorName = String(body.authorName || 'Customer').trim();
-  const rating = Math.min(5, Math.max(1, Number(body.rating || 5)));
-  const comment = String(body.comment || '').trim();
+  const authorName = String(body.authorName || 'Customer').trim().slice(0, 100);
+  const rating = Math.min(5, Math.max(1, Math.round(Number(body.rating) || 5)));
+  const comment = String(body.comment || '').trim().slice(0, 1000);
   if (!productId || !comment) {
     return c.json({ success: false, message: 'পণ্য ও রিভিউ মন্তব্য আবশ্যক।' }, 400);
   }
   const db = c.get('db');
+  const prod = await db.select({ id: products.id }).from(products).where(eq(products.id, productId)).get();
+  if (!prod) {
+    return c.json({ success: false, message: 'রিভিউ প্রদানের জন্য পণ্যটি খুঁজে পাওয়া যায়নি।' }, 404);
+  }
+
   const user = c.get('user');
   await db.insert(reviews).values({
-    id: `rev-${Date.now()}`,
+    id: `rev-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`,
     productId,
     userId: user?.id || null,
     authorName,
@@ -238,6 +270,9 @@ couponsRouter.post('/validate', async (c) => {
   const subtotal = Number(body.subtotal || 0);
   if (!code) {
     return c.json({ isValid: false, discountAmount: 0, message: 'অনুগ্রহ করে কুপন কোড লিখুন।' });
+  }
+  if (!Number.isFinite(subtotal) || subtotal < 0) {
+    return c.json({ isValid: false, discountAmount: 0, message: 'অর্ডারের সাবটোটাল সঠিক নয়।' }, 400);
   }
   const db = c.get('db');
   const { settings } = await getStoreAndPaymentSettings(db);

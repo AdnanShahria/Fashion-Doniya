@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { eq, sql } from 'drizzle-orm';
+import { eq, or, sql } from 'drizzle-orm';
 import type { AppEnv } from '../types';
 import type { AppDatabase } from '../utils/db-factory';
 import {
@@ -133,24 +133,26 @@ export async function recalculateCustomerOrderStats(
     targetUser = await db.select().from(users).where(eq(users.id, userId)).get();
   }
   if (!targetUser && normPhone) {
-    const allUsers = await db.select().from(users);
-    targetUser = allUsers.find((u) => normalizePhone(u.phone) === normPhone);
+    targetUser = await db
+      .select()
+      .from(users)
+      .where(
+        or(
+          eq(users.phone, normPhone),
+          eq(users.phone, `+88${normPhone}`),
+          eq(users.phone, `88${normPhone}`)
+        )
+      )
+      .get();
   }
   if (!targetUser) return;
 
-  const targetNormPhone = normPhone || normalizePhone(targetUser.phone || '');
-  const allOrders = await db.select().from(orders);
-  const validOrders = allOrders.filter((o) => {
-    if (INACTIVE_ORDER_STATUSES.has(o.orderStatus)) return false;
-    if (o.userId && o.userId === targetUser.id) return true;
-    if (targetNormPhone) {
-      const custPhone = normalizePhone(
-        safeJsonParse<{ phone?: string }>(o.customer, { phone: '' }).phone || ''
-      );
-      if (custPhone && custPhone === targetNormPhone) return true;
-    }
-    return false;
-  });
+  const userOrders = await db
+    .select()
+    .from(orders)
+    .where(eq(orders.userId, targetUser.id));
+
+  const validOrders = userOrders.filter((o) => !INACTIVE_ORDER_STATUSES.has(o.orderStatus));
 
   const totalOrders = validOrders.length;
   const totalSpent = validOrders.reduce((s, o) => s + Number(o.totalAmount || 0), 0);
@@ -215,11 +217,10 @@ async function handleVerifyAndTrackOrder(c: Context<AppEnv>) {
   }
 
   const db = c.get('db');
-  const allRows = await db.select().from(orders);
-  const matchedRow = allRows.find(
-    (o) =>
-      o.orderNumber.toUpperCase() === cleanOrderId || o.id.toUpperCase() === cleanOrderId
-  );
+  let matchedRow = await db.select().from(orders).where(eq(orders.orderNumber, cleanOrderId)).get();
+  if (!matchedRow) {
+    matchedRow = await db.select().from(orders).where(eq(orders.id, cleanOrderId)).get();
+  }
 
   if (!matchedRow) {
     return c.json(
@@ -448,13 +449,35 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
         ? Number((requestedTotalYards - addonTotalYards).toFixed(2))
         : requestedTotalYards;
 
+    const minOrder = Math.max(0.25, Number(prod.minOrderQuantity || 1));
+    const step = Math.max(0.1, Number(prod.stepYard || 0.5));
+    if (mainYards < minOrder - 0.001) {
+      return c.json(
+        {
+          success: false,
+          message: `"${prod.name}"-এর জন্য ন্যূনতম অর্ডার পরিমাণ ${minOrder} গজ।`,
+        },
+        400
+      );
+    }
+    const stepDiff = Math.round(((mainYards - minOrder) % step) * 100) / 100;
+    if (stepDiff > 0.01 && stepDiff < step - 0.01) {
+      return c.json(
+        {
+          success: false,
+          message: `"${prod.name}"-এর অর্ডার পরিমাণ ${step} গজের ধাপ অনুযায়ী হতে হবে।`,
+        },
+        400
+      );
+    }
+
     const customCfg = prod.customMeasurementConfig
       ? safeJsonParse<{ standardGaj?: number; additionalPricePerYard?: number }>(
           prod.customMeasurementConfig,
           {}
         )
       : {};
-    const stdGaj = Number(customCfg.standardGaj || item.standardGaj || 0);
+    const stdGaj = Number(customCfg.standardGaj || 0);
     const extraRate = Number(customCfg.additionalPricePerYard || 0);
     let mainFabricTotal = Math.round(pricePerYard * mainYards);
     if (item.sizeMode === 'custom' && stdGaj > 0 && extraRate > 0 && mainYards > stdGaj) {
@@ -509,7 +532,27 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
     const isDeactivatedInSettings = cfgCouponEntry && cfgCouponEntry.isActive === false;
 
     if (!isDeactivatedInSettings) {
-      const foundCoupon = await db.select().from(coupons).where(eq(coupons.code, couponCode)).get();
+      let foundCoupon = await db.select().from(coupons).where(eq(coupons.code, couponCode)).get();
+      if (!foundCoupon && cfgCouponEntry && cfgCouponEntry.isActive) {
+        await db
+          .insert(coupons)
+          .values({
+            id: `cp-${cfgCouponEntry.code.toLowerCase()}`,
+            code: cfgCouponEntry.code.toUpperCase(),
+            discountType: cfgCouponEntry.discountType,
+            discountValue: cfgCouponEntry.discountValue,
+            minOrderAmount: cfgCouponEntry.minOrderAmount || 0,
+            maxDiscountAmount: cfgCouponEntry.maxDiscountAmount || null,
+            usageLimit: cfgCouponEntry.usageLimit || null,
+            usedCount: cfgCouponEntry.usedCount || 0,
+            isActive: true,
+            expiresAt: cfgCouponEntry.expiresAt || null,
+            createdAt: now,
+          })
+          .onConflictDoNothing();
+        foundCoupon = await db.select().from(coupons).where(eq(coupons.code, couponCode)).get();
+      }
+
       if (foundCoupon && foundCoupon.isActive) {
         const notExpired = !foundCoupon.expiresAt || Date.parse(foundCoupon.expiresAt) > Date.now();
         const underLimit = !foundCoupon.usageLimit || Number(foundCoupon.usedCount || 0) < foundCoupon.usageLimit;
@@ -523,19 +566,64 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
             : rawDiscount;
           appliedDbCoupon = foundCoupon;
         }
-      } else if (cfgCouponEntry && cfgCouponEntry.isActive) {
-        const notExpired = !cfgCouponEntry.expiresAt || Date.parse(cfgCouponEntry.expiresAt) > Date.now();
-        const underLimit = !cfgCouponEntry.usageLimit || Number(cfgCouponEntry.usedCount || 0) < cfgCouponEntry.usageLimit;
-        if (notExpired && underLimit && (!cfgCouponEntry.minOrderAmount || verifiedSubtotal >= cfgCouponEntry.minOrderAmount)) {
-          const rawDiscount =
-            cfgCouponEntry.discountType === 'percentage'
-              ? Math.round((verifiedSubtotal * cfgCouponEntry.discountValue) / 100)
-              : Math.min(verifiedSubtotal, cfgCouponEntry.discountValue);
-          verifiedDiscount = cfgCouponEntry.maxDiscountAmount
-            ? Math.min(rawDiscount, cfgCouponEntry.maxDiscountAmount)
-            : rawDiscount;
-        }
       }
+    }
+  }
+
+  // Atomic stock reservation with automatic rollback on concurrency exhaustion
+  const successfullyDeducted: Array<{ prodId: string; yards: number }> = [];
+  let insufficientStockProduct: string | null = null;
+
+  for (const [prodId, usedYards] of stockDeductions.entries()) {
+    const res = await db
+      .update(products)
+      .set({
+        stockYards: sql`ROUND(${products.stockYards} - ${usedYards}, 2)`,
+        updatedAt: now,
+      })
+      .where(sql`${products.id} = ${prodId} AND ${products.stockYards} >= ${usedYards}`)
+      .returning({ id: products.id });
+
+    if (!res || res.length === 0) {
+      insufficientStockProduct = prodMap.get(prodId)?.name || 'পণ্য';
+      break;
+    }
+    successfullyDeducted.push({ prodId, yards: usedYards });
+  }
+
+  if (insufficientStockProduct) {
+    for (const item of successfullyDeducted) {
+      await db
+        .update(products)
+        .set({
+          stockYards: sql`ROUND(${products.stockYards} + ${item.yards}, 2)`,
+          updatedAt: now,
+        })
+        .where(eq(products.id, item.prodId));
+    }
+    return c.json(
+      {
+        success: false,
+        message: `দুঃখিত, "${insufficientStockProduct}" পণ্যটির পর্যাপ্ত স্টক এই মুহূর্তে পাওয়া যায়নি।`,
+      },
+      400
+    );
+  }
+
+  // Atomic coupon usage increment if coupon is valid
+  if (appliedDbCoupon && verifiedDiscount > 0) {
+    const couponRes = await db
+      .update(coupons)
+      .set({ usedCount: sql`${coupons.usedCount} + 1` })
+      .where(
+        appliedDbCoupon.usageLimit
+          ? sql`${coupons.id} = ${appliedDbCoupon.id} AND ${coupons.usedCount} < ${appliedDbCoupon.usageLimit}`
+          : eq(coupons.id, appliedDbCoupon.id)
+      )
+      .returning({ id: coupons.id });
+
+    if (appliedDbCoupon.usageLimit && (!couponRes || couponRes.length === 0)) {
+      verifiedDiscount = 0;
     }
   }
 
@@ -567,13 +655,6 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
       updatedAt: now,
     })
     .onConflictDoNothing();
-
-  if (appliedDbCoupon && verifiedDiscount > 0) {
-    await db
-      .update(coupons)
-      .set({ usedCount: sql`${coupons.usedCount} + 1` })
-      .where(eq(coupons.id, appliedDbCoupon.id));
-  }
 
   for (let idx = 0; idx < verifiedItems.length; idx++) {
     const item = verifiedItems[idx];
@@ -616,16 +697,6 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
         soldAt: now,
       })
       .onConflictDoNothing();
-  }
-
-  for (const [prodId, usedYards] of stockDeductions.entries()) {
-    await db
-      .update(products)
-      .set({
-        stockYards: sql`MAX(0, ROUND(${products.stockYards} - ${usedYards}, 2))`,
-        updatedAt: now,
-      })
-      .where(eq(products.id, prodId));
   }
 
   await db
@@ -766,10 +837,9 @@ adminOrdersRouter.get('/', async (c) => {
 });
 
 async function findOrderByIdOrNumber(db: AppEnv['Variables']['db'], idOrNumber: string) {
-  const all = await db.select().from(orders);
-  return all.find(
-    (o) => o.id === idOrNumber || o.orderNumber.toUpperCase() === idOrNumber.toUpperCase()
-  );
+  const byId = await db.select().from(orders).where(eq(orders.id, idOrNumber)).get();
+  if (byId) return byId;
+  return await db.select().from(orders).where(eq(orders.orderNumber, idOrNumber)).get();
 }
 
 adminOrdersRouter.put('/:id', async (c) => {

@@ -23,7 +23,7 @@ import {
 } from './utils/edge-handlers';
 
 import { healthRouter } from './routers/health';
-import { bulkRouter } from './routers/bulk';
+import { bulkRouter, getBulkHomePayload } from './routers/bulk';
 import { authRouter, adminAuthRouter } from './routers/auth';
 import { productsRouter, adminProductsRouter } from './routers/products';
 import { categoriesRouter, adminCategoriesRouter } from './routers/categories';
@@ -58,14 +58,21 @@ export function isAllowedStorefrontOrigin(origin: string | undefined, env?: Bind
   try {
     const parsed = new URL(origin);
     const hostname = parsed.hostname.toLowerCase();
+    const isProd =
+      env?.NODE_ENV === 'production' ||
+      Boolean(env?.DB) ||
+      (Boolean(env?.TURSO_URL) && !String(env?.TURSO_URL).startsWith('file:'));
 
     if (
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname.endsWith('.pages.dev') ||
       hostname === 'fashiondoniyabd.com' ||
-      hostname === 'www.fashiondoniyabd.com'
+      hostname === 'www.fashiondoniyabd.com' ||
+      hostname === 'fashion-doniya.pages.dev' ||
+      /^[a-z0-9-]+\.fashion-doniya\.pages\.dev$/.test(hostname)
     ) {
+      return true;
+    }
+
+    if (!isProd && (hostname === 'localhost' || hostname === '127.0.0.1')) {
       return true;
     }
 
@@ -181,9 +188,9 @@ function createApiSubApp() {
   sub.route('/health', healthRouter);
   sub.route('/bulk', bulkRouter);
   sub.get('/bootstrap', async (c) => {
-    const url = new URL(c.req.url);
-    url.pathname = url.pathname.replace(/\/bootstrap$/, '/bulk/home');
-    return sub.fetch(new Request(url.toString(), c.req.raw), c.env);
+    const db = c.get('db');
+    const payload = await getBulkHomePayload(db, c.env);
+    return c.json(payload);
   });
 
   sub.route('/auth', authRouter);
@@ -264,7 +271,7 @@ app.use(
 app.use(
   '/api/*',
   cors({
-    origin: (origin, c) => (isAllowedStorefrontOrigin(origin, c.env) ? origin || '*' : ''),
+    origin: (origin, c) => (origin && isAllowedStorefrontOrigin(origin, c.env) ? origin : ''),
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: [
       'Content-Type',

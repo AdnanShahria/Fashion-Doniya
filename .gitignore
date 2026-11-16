@@ -11,4 +11,7 @@ coverage/
 !.dev.vars.example
 .wrangler/
 backend/dev.db*
+backend/test_*.db*
+*.tsbuildinfo
+*.sqlite*
 /data/

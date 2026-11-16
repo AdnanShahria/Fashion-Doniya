@@ -17,6 +17,7 @@ export interface Bindings {
   DEMO_MODE?: string;
   SITE_URL?: string;
   ALLOWED_ORIGINS?: string;
+  TRUST_PROXY?: string;
   GEMINI_API_KEY?: string;
   IMGBB_API_KEY?: string;
   ORBITMAIL_API_KEY?: string;

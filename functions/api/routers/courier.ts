@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { eq } from 'drizzle-orm';
+import { eq, or } from 'drizzle-orm';
 import type { AppEnv } from '../types';
 import { orders, courierInfo, trackings } from '../../../backend/server/db/schemas/index';
 import type { Order, OrderStatus } from '../../../frontend/src/types/index';
@@ -17,11 +17,13 @@ courierRouter.post('/webhook', async (c) => {
   const secret = String(
     c.req.header('x-courier-webhook-secret') ||
       c.req.header('x-admin-token') ||
-      body.webhookSecret ||
       ''
   ).trim();
 
-  const isProd = c.env?.NODE_ENV === 'production';
+  const isProd =
+    c.env?.NODE_ENV === 'production' ||
+    Boolean(c.env?.DB) ||
+    (Boolean(c.env?.TURSO_URL) && !String(c.env?.TURSO_URL).startsWith('file:'));
   const expectedWebhookSecret = String(
     c.env?.COURIER_WEBHOOK_SECRET || (isProd ? '' : 'fd-courier-webhook-2026')
   ).trim();
@@ -48,22 +50,21 @@ courierRouter.post('/webhook', async (c) => {
   }
 
   const db = c.get('db');
-  const [allCouriers, allOrders] = await Promise.all([
-    db.select().from(courierInfo),
-    db.select().from(orders),
-  ]);
+  let courierRec = null;
+  if (trackingNumber) {
+    courierRec = await db.select().from(courierInfo).where(eq(courierInfo.trackingNumber, trackingNumber)).get();
+  }
+  if (!courierRec && orderNumber) {
+    courierRec = await db.select().from(courierInfo).where(eq(courierInfo.orderNumber, orderNumber)).get();
+  }
 
-  const courierRec = allCouriers.find(
-    (cr) =>
-      (trackingNumber && cr.trackingNumber.toUpperCase() === trackingNumber.toUpperCase()) ||
-      (orderNumber && cr.orderNumber.toUpperCase() === orderNumber.toUpperCase())
-  );
-
-  const orderRow = allOrders.find(
-    (o) =>
-      (orderNumber && o.orderNumber.toUpperCase() === orderNumber.toUpperCase()) ||
-      (courierRec && o.id === courierRec.orderId)
-  );
+  let orderRow = null;
+  if (orderNumber) {
+    orderRow = await db.select().from(orders).where(eq(orders.orderNumber, orderNumber)).get();
+  }
+  if (!orderRow && courierRec) {
+    orderRow = await db.select().from(orders).where(eq(orders.id, courierRec.orderId)).get();
+  }
 
   if (!orderRow) {
     return c.json({ success: false, message: 'Matching order not found for courier webhook.' }, 404);
@@ -75,6 +76,20 @@ courierRouter.post('/webhook', async (c) => {
     courierStatusStr,
     orderRow.orderStatus as OrderStatus
   );
+
+  // Prevent reopening or mutating terminal orders (Cancelled / Returned) via automated webhook
+  if (
+    (orderRow.orderStatus === 'Cancelled' || orderRow.orderStatus === 'Returned') &&
+    mappedStatus !== orderRow.orderStatus
+  ) {
+    return c.json(
+      {
+        success: false,
+        message: `অর্ডারটি ইতিমধ্যে "${orderRow.orderStatus}" অবস্থায় রয়েছে, কুরিয়ার ওয়েবহুক দ্বারা পরিবর্তন সম্ভব নয়।`,
+      },
+      400
+    );
+  }
 
   await db
     .update(orders)
@@ -140,10 +155,10 @@ courierRouter.post('/sync/:id', async (c) => {
     location?: string;
   };
   const db = c.get('db');
-  const allOrders = await db.select().from(orders);
-  const orderRow = allOrders.find(
-    (o) => o.id === id || o.orderNumber.toUpperCase() === id.toUpperCase()
-  );
+  let orderRow = await db.select().from(orders).where(eq(orders.id, id)).get();
+  if (!orderRow) {
+    orderRow = await db.select().from(orders).where(eq(orders.orderNumber, id)).get();
+  }
   if (!orderRow) {
     return c.json({ success: false, message: 'অর্ডারটি খুঁজে পাওয়া যায়নি।' }, 404);
   }

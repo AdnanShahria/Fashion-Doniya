@@ -351,6 +351,7 @@ export const AccountPage: React.FC = () => {
   };
 
   const handleFillDemoCredentials = () => {
+    if (!import.meta.env.DEV) return;
     setIsForgotPassword(false);
     setAuthTab('login');
     setLoginIdentifier('01711223344');
@@ -400,9 +401,9 @@ export const AccountPage: React.FC = () => {
   if (!currentUser) {
     return (
       <div className="w-full px-3 pt-1.5 pb-6 md:py-10 bg-[#FAF6F0]">
-        <div className="max-w-[400px] md:max-w-[430px] mx-auto bg-white rounded-2xl border border-[#E5D4C0] shadow-[0_10px_28px_-8px_rgba(107,8,18,0.14)] overflow-hidden">
+        <div className="max-w-100 md:max-w-107.5 mx-auto bg-white rounded-2xl border border-[#E5D4C0] shadow-[0_10px_28px_-8px_rgba(107,8,18,0.14)] overflow-hidden">
           {/* Top Maroon-Gold Accent Bar */}
-          <div className="h-1.5 w-full bg-gradient-to-r from-[#6B0812] via-[#9E0B16] to-[#C5A46D]" />
+          <div className="h-1.5 w-full bg-linear-to-r from-[#6B0812] via-[#9E0B16] to-[#C5A46D]" />
 
           <div className="p-4 md:p-6 space-y-3 md:space-y-4">
             {/* Compact Brand Header */}
@@ -837,7 +838,7 @@ export const AccountPage: React.FC = () => {
               {(!isForgotPassword || otpSent) && (
                 <button
                   type="submit"
-                  className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#850B16] via-[#6B0812] to-[#54050D] hover:from-[#960D19] hover:to-[#6B0812] active:scale-[0.98] text-white font-bold text-xs sm:text-sm shadow-[0_6px_16px_-3px_rgba(107,8,18,0.4)] transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full py-2.5 px-4 rounded-xl bg-linear-to-r from-[#850B16] via-[#6B0812] to-[#54050D] hover:from-[#960D19] hover:to-[#6B0812] active:scale-[0.98] text-white font-bold text-xs sm:text-sm shadow-[0_6px_16px_-3px_rgba(107,8,18,0.4)] transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <LogIn className="w-4 h-4" />
                   <span>

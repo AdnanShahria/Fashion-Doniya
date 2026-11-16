@@ -17,13 +17,18 @@ interface JailEntry {
 const buckets = new Map<string, RateLimitBucket>();
 const jailMap = new Map<string, JailEntry>();
 
-function getClientIp(headers: Headers): string {
-  return (
-    headers.get('cf-connecting-ip') ||
-    headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    headers.get('x-real-ip') ||
-    '127.0.0.1'
-  );
+function getClientIp(headers: Headers, env?: AppEnv['Bindings']): string {
+  const cfIp = headers.get('cf-connecting-ip')?.trim();
+  if (cfIp) return cfIp;
+
+  const trustProxy = env?.TRUST_PROXY === 'true' || env?.NODE_ENV !== 'production';
+  if (trustProxy) {
+    const forwarded = headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+    if (forwarded) return forwarded;
+    const realIp = headers.get('x-real-ip')?.trim();
+    if (realIp) return realIp;
+  }
+  return '127.0.0.1';
 }
 
 function enforceMapCap<K, V>(map: Map<K, V>) {
@@ -53,7 +58,7 @@ function createRateLimiter(options: {
   jailOnThreshold?: number;
 }): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
-    const ip = getClientIp(c.req.raw.headers);
+    const ip = getClientIp(c.req.raw.headers, c.env);
     const now = Date.now();
 
     const jailed = jailMap.get(ip);

@@ -236,10 +236,10 @@ async function upsertAdminCustomer(
   updates: Partial<CustomerUser>
 ) {
   const normPhone = updates.phone ? normalizePhone(updates.phone) : '';
-  const allRows = await db.select().from(users);
-  const existing =
-    allRows.find((r) => r.id === id) ||
-    (normPhone ? allRows.find((r) => normalizePhone(r.phone) === normPhone) : undefined);
+  let existing = await db.select().from(users).where(eq(users.id, id)).get();
+  if (!existing && normPhone) {
+    existing = await db.select().from(users).where(eq(users.phone, normPhone)).get();
+  }
   const now = new Date().toISOString();
 
   if (existing) {

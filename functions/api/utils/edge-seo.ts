@@ -278,11 +278,11 @@ export function injectSeoIntoHtml(baseHtml: string, options: InjectSeoOptions): 
     .filter(Boolean)
     .join('\n    ');
 
-  const withHead = cleaned.replace(/<\/head>/i, `    ${headInjections}\n  </head>`);
+  const withHead = cleaned.replace(/<\/head>/i, () => `    ${headInjections}\n  </head>`);
   if (options.rootHtml !== undefined) {
     return withHead.replace(
       /<div\s+id=["']root["'][^>]*>\s*<\/div>/i,
-      `<div id="root">${options.rootHtml}</div>`
+      () => `<div id="root">${options.rootHtml}</div>`
     );
   }
   return withHead;

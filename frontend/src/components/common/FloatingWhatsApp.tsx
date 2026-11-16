@@ -6,23 +6,24 @@ import { X, Globe } from 'lucide-react';
 
 function normalizeContactUrl(url: string, iconType: FloatingContactIconType): string {
   const trimmed = (url || '').trim();
-  if (!trimmed) return '#';
+  if (!trimmed || /^javascript:|^data:/i.test(trimmed)) return '#';
 
   if (iconType === 'phone') {
-    return trimmed.startsWith('tel:') ? trimmed : `tel:${trimmed.replace(/\s+/g, '')}`;
+    const cleanPhone = trimmed.replace(/[^0-9+]/g, '');
+    return cleanPhone ? `tel:${cleanPhone}` : '#';
   }
   if (iconType === 'email') {
-    return trimmed.startsWith('mailto:') ? trimmed : `mailto:${trimmed}`;
+    return trimmed.startsWith('mailto:') ? trimmed : `mailto:${trimmed.replace(/\s+/g, '')}`;
   }
   if (iconType === 'whatsapp') {
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+    if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) return trimmed;
     const cleanNum = trimmed.replace(/[^0-9]/g, '');
-    return `https://wa.me/${cleanNum}`;
+    return cleanNum ? `https://wa.me/${cleanNum}` : '#';
   }
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('tel:') || trimmed.startsWith('mailto:')) {
+  if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) {
     return trimmed;
   }
-  return `https://${trimmed}`;
+  return `https://${trimmed.replace(/^https?:\/\//i, '')}`;
 }
 
 function renderContactBadgeIcon(item: FloatingContactItem) {

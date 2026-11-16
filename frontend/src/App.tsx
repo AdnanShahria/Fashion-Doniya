@@ -472,7 +472,7 @@ const AppContent: React.FC = () => {
   const showGlobalSubpageBackBar = !pagesWithInlineBackBar.has(currentPage);
 
   return (
-    <div className="min-h-screen w-full overflow-x-clip flex flex-col bg-[#FAF6F0] text-[#241614] pb-[60px] md:pb-0">
+    <div className="min-h-screen w-full overflow-x-clip flex flex-col bg-[#FAF6F0] text-[#241614] pb-15 md:pb-0">
       {/* 1. Responsive Luxury Header Navigation */}
       <Header />
 
@@ -519,11 +519,7 @@ const AppContent: React.FC = () => {
             <Route path="/terms" element={<PolicyPage />} />
             <Route
               path="/shop-2-5"
-              element={
-                <FabricWidthCategoryPage
-                  width={selectedWidthFilter === '2.5' ? '2.5' : '2.5'}
-                />
-              }
+              element={<FabricWidthCategoryPage width="2.5" />}
             />
             <Route path="/shop-3-5" element={<FabricWidthCategoryPage width="3.5" />} />
             <Route path="/login" element={<AccountPage />} />

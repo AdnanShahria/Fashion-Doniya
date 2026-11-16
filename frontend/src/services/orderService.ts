@@ -404,11 +404,9 @@ export const orderService = {
         notifyLocalOrderSubscribers(res.data.order);
         return res.data.order;
       }
-      if (res.data && res.data.success === false) {
-        throw new Error(
-          res.data.message || 'অর্ডার সম্পন্ন করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।'
-        );
-      }
+      throw new Error(
+        res.data?.message || 'অর্ডার সম্পন্ন করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।'
+      );
     } catch (err: unknown) {
       const errObj = err as { response?: { status?: number; data?: { message?: string } } };
       if (errObj?.response?.status) {
@@ -417,11 +415,13 @@ export const orderService = {
             'অর্ডার সম্পন্ন করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।'
         );
       }
-      if (err instanceof Error && !('isAxiosError' in err)) {
+      if (err instanceof Error) {
         throw err;
       }
+      throw new Error(
+        'সার্ভারের সাথে সংযোগ স্থাপন করা সম্ভব হয়নি। অনুগ্রহ করে আপনার ইন্টারনেট সংযোগ চেক করে আবার চেষ্টা করুন।'
+      );
     }
-    return this.createOrder(orderData);
   },
 
   // Update Order Status + Create timestamped order_tracking_history record
