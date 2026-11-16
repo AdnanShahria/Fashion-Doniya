@@ -17,11 +17,13 @@ import { settingsService } from '../services/settingsService';
 import { orderService } from '../services/orderService';
 import { categoryService } from '../services/categoryService';
 import { measurementService } from '../services/measurementService';
-import { api } from '../services/api';
+import { api, getCustomerAuthToken } from '../services/api';
+import { apiCache } from '../services/apiCache';
 import { useHomeStore } from '../store/homeStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
+import { useUserStore } from '../store/userStore';
 import { useRecentlyViewedStore } from '../store/recentlyViewedStore';
 
 interface NavigationParams {
@@ -96,10 +98,10 @@ interface StoreContextType {
   openQuickView: (product: Product) => void;
   closeQuickView: () => void;
   loginDemoUser: (phone: string, fullName: string) => void;
-  loginUser: (phone: string, password: string) => Promise<boolean>;
-  registerUser: (fullName: string, phone: string, password: string) => Promise<boolean>;
+  loginUser: (identifier: string, password: string) => Promise<boolean>;
+  registerUser: (fullName: string, phone: string, password: string, email?: string) => Promise<boolean>;
   requestPasswordResetOtp: (identifier: string) => Promise<{ success: boolean; devOtp?: string; message?: string }>;
-  resetPassword: (phone: string, newPassword: string, otp?: string) => Promise<boolean>;
+  resetPassword: (identifier: string, newPassword: string, otp?: string) => Promise<boolean>;
   changeUserPassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
   applyCoupon: (code: string, subtotalOverride?: number) => boolean;
   clearCoupon: (silent?: boolean) => void;
@@ -196,7 +198,48 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setSettings(latest);
       useSettingsStore.getState().setSettings(latest);
     };
+    const handleProductsUpdated = () => {
+      setProducts(StorageService.getProducts());
+    };
+    const handleCustomerUnauthorized = () => {
+      setCurrentUser(null);
+      StorageService.setCurrentUser(null);
+      useAuthStore.getState().logout();
+      useUserStore.getState().reset();
+      setToast({
+        id: Date.now(),
+        text: 'সেশনের মেয়াদ শেষ হয়েছে, অনুগ্রহ করে পুনরায় লগইন করুন।',
+        type: 'error',
+      });
+    };
     window.addEventListener('settings-updated', handleSettingsUpdated);
+    window.addEventListener('products-updated', handleProductsUpdated);
+    window.addEventListener('customer-unauthorized', handleCustomerUnauthorized);
+
+    // Re-validate customer auth session on startup
+    const token = getCustomerAuthToken();
+    if (token) {
+      api
+        .get<{ success?: boolean; user?: CustomerUser }>('/auth/me')
+        .then((res) => {
+          if (res.data?.success && res.data.user) {
+            setCurrentUser(res.data.user);
+            StorageService.setCurrentUser(res.data.user);
+            useAuthStore.getState().setAuth(res.data.user, token);
+          }
+        })
+        .catch((err: unknown) => {
+          const status = (err as { response?: { status?: number } })?.response?.status;
+          if (status === 401 || status === 403) {
+            setCurrentUser(null);
+            StorageService.setCurrentUser(null);
+            useAuthStore.getState().logout();
+          }
+        });
+    } else {
+      setCurrentUser(null);
+      StorageService.setCurrentUser(null);
+    }
 
     // Subscribe to real-time SSE stream for instant frontend updates when Admin saves anything
     let es: EventSource | null = null;
@@ -238,6 +281,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
     return () => {
       window.removeEventListener('settings-updated', handleSettingsUpdated);
+      window.removeEventListener('products-updated', handleProductsUpdated);
+      window.removeEventListener('customer-unauthorized', handleCustomerUnauthorized);
       es?.close();
     };
   }, []);
@@ -274,7 +319,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const [currentUser, setCurrentUser] = useState<CustomerUser | null>(() => {
     StorageService.initialize();
-    return StorageService.getCurrentUser();
+    return getCustomerAuthToken() ? StorageService.getCurrentUser() : null;
   });
 
   const [lastCompletedOrder, setLastCompletedOrderState] = useState<Order | null>(() => {
@@ -360,8 +405,11 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         const c = params?.category || selectedCategory || 'kamiz';
         return `/fabric/${w}-bahar/${c}`;
       }
-      case 'product-details':
-        return `/product/${params?.productId || selectedProductId || ''}`;
+      case 'product-details': {
+        const key = params?.productId || selectedProductId || '';
+        const matched = products.find((p) => p.id === key || p.slug === key);
+        return `/product/${encodeURIComponent(matched?.slug || key)}`;
+      }
       case 'shop':
         return '/shop';
       case 'shop-2-5':
@@ -448,10 +496,19 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       return;
     }
 
-    const prodMatch = cleanPath.match(/^\/product\/([a-zA-Z0-9_-]+)/);
+    const prodMatch = cleanPath.match(/^\/product\/([^/?#]+)/);
     if (prodMatch) {
+      let decoded = prodMatch[1];
+      try {
+        decoded = decodeURIComponent(decoded);
+      } catch {
+        // keep raw if malformed URI component
+      }
+      const matched = StorageService.getProducts().find(
+        (p) => p.id === decoded || p.slug === decoded
+      );
       setCurrentPage('product-details');
-      setSelectedProductId(prodMatch[1]);
+      setSelectedProductId(matched?.id || decoded);
       return;
     }
 
@@ -476,7 +533,14 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     //   setCurrentPage('sysadm');
     } else if (cleanPath === '/wishlist') {
       setCurrentPage('wishlist');
-    } else if (cleanPath === '/account' || cleanPath.startsWith('/account/')) {
+    } else if (
+      cleanPath === '/account' ||
+      cleanPath.startsWith('/account/') ||
+      cleanPath === '/login' ||
+      cleanPath === '/register' ||
+      cleanPath === '/forgot-password' ||
+      cleanPath === '/reset-password'
+    ) {
       setCurrentPage('account');
     } else if (cleanPath === '/shop') {
       setCurrentPage('shop');
@@ -882,9 +946,14 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     showToast(`স্বাগতম, ${fullName}! লগইন সম্পন্ন হয়েছে।`, 'success');
   };
 
-  const loginUser = async (phone: string, password: string): Promise<boolean> => {
+  const loginUser = async (identifier: string, password: string): Promise<boolean> => {
     try {
-      const r = await api.post('/auth/login', { phone, password });
+      const r = await api.post('/auth/login', {
+        identifier,
+        phone: identifier,
+        email: identifier,
+        password,
+      });
       if (r.data?.success && r.data.user) {
         useAuthStore.getState().setAuth(r.data.user, r.data.token);
         setCurrentUser(r.data.user);
@@ -892,16 +961,20 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         showToast(r.data.message || `স্বাগতম, ${r.data.user.fullName}!`, 'success');
         return true;
       }
+      showToast(r.data?.message || 'মোবাইল নম্বর/ইমেইল বা পাসওয়ার্ড সঠিক নয়।', 'error');
+      return false;
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      if (msg) {
+      const errObj = err as { response?: { status?: number; data?: { message?: string } } };
+      if (errObj?.response) {
+        const msg =
+          errObj.response.data?.message || 'মোবাইল নম্বর/ইমেইল বা পাসওয়ার্ড সঠিক নয়।';
         showToast(msg, 'error');
         return false;
       }
     }
 
-    // Local / Offline fallback
-    const res = StorageService.authenticateUser(phone, password);
+    // Local / Offline fallback (only when server is unreachable)
+    const res = StorageService.authenticateUser(identifier, password);
     if (res.success && res.user) {
       setCurrentUser(res.user);
       useAuthStore.getState().setAuth(res.user);
@@ -912,9 +985,19 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return false;
   };
 
-  const registerUser = async (fullName: string, phone: string, password: string): Promise<boolean> => {
+  const registerUser = async (
+    fullName: string,
+    phone: string,
+    password: string,
+    email?: string
+  ): Promise<boolean> => {
     try {
-      const r = await api.post('/auth/register', { fullName, phone, password });
+      const r = await api.post('/auth/register', {
+        fullName,
+        phone,
+        password,
+        ...(email?.trim() ? { email: email.trim() } : {}),
+      });
       if (r.data?.success && r.data.user) {
         useAuthStore.getState().setAuth(r.data.user, r.data.token);
         setCurrentUser(r.data.user);
@@ -922,15 +1005,18 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         showToast(r.data.message || `রেজিস্ট্রেশন সফল হয়েছে! স্বাগতম, ${r.data.user.fullName}!`, 'success');
         return true;
       }
+      showToast(r.data?.message || 'রেজিস্ট্রেশন সম্পন্ন করা যায়নি।', 'error');
+      return false;
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      if (msg) {
+      const errObj = err as { response?: { status?: number; data?: { message?: string } } };
+      if (errObj?.response) {
+        const msg = errObj.response.data?.message || 'রেজিস্ট্রেশন সম্পন্ন করা যায়নি।';
         showToast(msg, 'error');
         return false;
       }
     }
 
-    // Local / Offline fallback
+    // Local / Offline fallback (only when server is unreachable)
     const res = StorageService.registerUser(fullName, phone, password);
     if (res.success && res.user) {
       setCurrentUser(res.user);
@@ -989,26 +1075,36 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const resetPassword = async (
-    phone: string,
+    identifier: string,
     newPassword: string,
     otp?: string
   ): Promise<boolean> => {
     try {
-      const r = await api.post('/auth/forgot-password', { phone, newPassword, otp });
+      const r = await api.post('/auth/reset-password', {
+        identifier,
+        phone: identifier,
+        email: identifier,
+        code: otp,
+        otp,
+        newPassword,
+      });
       if (r.data?.success) {
         showToast(r.data.message || 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!', 'success');
         return true;
       }
+      showToast(r.data?.message || 'পাসওয়ার্ড রিসেট করা যায়নি।', 'error');
+      return false;
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      if (msg) {
+      const errObj = err as { response?: { data?: { message?: string } } };
+      if (errObj?.response) {
+        const msg = errObj.response.data?.message || 'পাসওয়ার্ড রিসেট করা যায়নি।';
         showToast(msg, 'error');
         return false;
       }
     }
 
     if (!otp) {
-      const res = StorageService.resetUserPassword(phone, newPassword);
+      const res = StorageService.resetUserPassword(identifier, newPassword);
       if (res.success) {
         showToast(res.message, 'success');
         return true;
@@ -1025,6 +1121,9 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     try {
       const r = await api.post('/auth/change-password', { currentPassword, newPassword });
       if (r.data?.success) {
+        if (r.data?.token) {
+          useAuthStore.getState().setAuth(currentUser, r.data.token);
+        }
         showToast(r.data.message || 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!', 'success');
         return true;
       }
@@ -1040,24 +1139,84 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const logoutUser = () => {
+    api.post('/auth/logout').catch(() => {});
     setCurrentUser(null);
+    StorageService.setCurrentUser(null);
     useAuthStore.getState().logout();
+    useUserStore.getState().reset();
+    apiCache.invalidatePrefix();
+    setLastCompletedOrderState(null);
+    try {
+      sessionStorage.removeItem('fd_last_completed_order');
+      localStorage.removeItem('fashion_doniya_orders');
+      localStorage.removeItem('fashion_doniya_order_tracking_history');
+      localStorage.removeItem('fashion_doniya_courier_information');
+    } catch {
+      // ignore storage errors
+    }
     showToast('লগআউট সম্পন্ন হয়েছে', 'info');
   };
 
   const updateUserProfile = (profile: Partial<CustomerUser>) => {
     if (!currentUser) return;
-    const updated = { ...currentUser, ...profile };
+    const mergedAddress = profile.address
+      ? {
+          district: profile.address.district ?? currentUser.address?.district ?? currentUser.district ?? '',
+          upazila: profile.address.upazila ?? currentUser.address?.upazila ?? currentUser.upazila ?? '',
+          area: profile.address.area ?? currentUser.address?.area ?? '',
+          fullAddress:
+            profile.address.fullAddress ??
+            currentUser.address?.fullAddress ??
+            currentUser.fullAddress ??
+            '',
+        }
+      : currentUser.address;
+
+    const updated: CustomerUser = {
+      ...currentUser,
+      ...profile,
+      ...(mergedAddress ? { address: mergedAddress } : {}),
+      district: profile.district ?? mergedAddress?.district ?? currentUser.district,
+      upazila: profile.upazila ?? mergedAddress?.upazila ?? currentUser.upazila,
+      fullAddress: profile.fullAddress ?? mergedAddress?.fullAddress ?? currentUser.fullAddress,
+    };
+
     setCurrentUser(updated);
+    StorageService.setCurrentUser(updated);
+
     const saved = StorageService.getSavedUsers();
     const idx = saved.findIndex(
       (u) => StorageService.normalizePhone(u.phone) === StorageService.normalizePhone(updated.phone)
     );
     if (idx >= 0) {
-      saved[idx] = { ...saved[idx], ...profile };
+      saved[idx] = { ...saved[idx], ...updated };
       StorageService.setSavedUsers([...saved]);
     }
-    showToast('প্রোফাইল তথ্য আপডেট করা হয়েছে', 'success');
+
+    api
+      .post<{ success?: boolean; customer?: CustomerUser; message?: string }>('/customers/sync', {
+        user: updated,
+      })
+      .then((res) => {
+        if (res.data?.success && res.data.customer) {
+          const syncedUser: CustomerUser = {
+            ...updated,
+            ...res.data.customer,
+            address: res.data.customer.address || updated.address,
+          };
+          setCurrentUser(syncedUser);
+          StorageService.setCurrentUser(syncedUser);
+        }
+        showToast('প্রোফাইল তথ্য আপডেট করা হয়েছে', 'success');
+      })
+      .catch((err: unknown) => {
+        const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+        if (msg) {
+          showToast(msg, 'error');
+        } else {
+          showToast('প্রোফাইল তথ্য আপডেট করা হয়েছে', 'success');
+        }
+      });
   };
 
   // Cart calculations

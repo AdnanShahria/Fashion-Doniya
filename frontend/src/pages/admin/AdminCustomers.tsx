@@ -131,11 +131,8 @@ export const AdminCustomers: React.FC = () => {
       return;
     }
 
-    const isNew = !formData.id || formData.id.startsWith('cust-');
-    const reqPromise =
-      formData.id && !formData.id.startsWith('cust-order-') && !isNew
-        ? api.put(`/admin/customers/${encodeURIComponent(formData.id)}`, formData)
-        : api.put(`/admin/customers/${encodeURIComponent(formData.id || `cust-${Date.now()}`)}`, formData);
+    const targetId = formData.id || `cust-${Date.now()}`;
+    const reqPromise = api.put(`/admin/customers/${encodeURIComponent(targetId)}`, formData);
 
     reqPromise
       .then(() => {
@@ -348,14 +345,16 @@ export const AdminCustomers: React.FC = () => {
                             )}
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteCustomer(cust)}
-                            className="p-1.5 text-[#242424]/40 hover:text-rose-600 rounded-md cursor-pointer"
-                            title="মুছে ফেলুন"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {!cust.id.startsWith('cust-order-') && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCustomer(cust)}
+                              className="p-1.5 text-[#242424]/40 hover:text-rose-600 rounded-md cursor-pointer"
+                              title="মুছে ফেলুন"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { settingsService } from '../../services/settingsService';
 import { productService } from '../../services/productService';
@@ -21,16 +21,29 @@ const SEO_PAGE_LIST: { key: string; label: string }[] = [
 export const AdminSeo: React.FC = () => {
   const { settings, products, refreshData, showToast } = useStore();
 
-  const [seoConfig, setSeoConfig] = useState<SeoConfig>(() => {
+  const hasEditedRef = useRef(false);
+
+  const [seoConfig, setSeoConfigRaw] = useState<SeoConfig>(() => {
     const existing = settings.seoConfig || INITIAL_SEO_CONFIG;
     return JSON.parse(JSON.stringify(existing));
   });
+  const setSeoConfig: React.Dispatch<React.SetStateAction<SeoConfig>> = (val) => {
+    hasEditedRef.current = true;
+    setSeoConfigRaw(val);
+  };
+
+  useEffect(() => {
+    if (!hasEditedRef.current && settings.seoConfig) {
+      setSeoConfigRaw(JSON.parse(JSON.stringify(settings.seoConfig)));
+    }
+  }, [settings.seoConfig]);
 
   const [activeTab, setActiveTab] = useState<'global' | 'pages' | 'products'>('global');
   const [selectedPageKey, setSelectedPageKey] = useState('home');
   const [prodSearch, setProdSearch] = useState('');
 
   const handleSaveSeoConfig = () => {
+    hasEditedRef.current = false;
     settingsService.updateSettings({ seoConfig });
     refreshData();
     showToast('SEO ও মেটা সেটিংস সফলভাবে সংরক্ষিত হয়েছে!', 'success');

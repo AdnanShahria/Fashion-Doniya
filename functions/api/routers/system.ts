@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { desc, eq } from 'drizzle-orm';
 import type { AppEnv } from '../types';
-import { systemSettings, adminLogs } from '../../../backend/server/db/schemas/index';
+import { systemSettings, adminLogs, coupons } from '../../../backend/server/db/schemas/index';
 import type { StoreSettings, PaymentSettings } from '../../../frontend/src/types/index';
 import { getStoreAndPaymentSettings, mergeSettingsWithDefaults } from '../utils/mappers';
 import { appendAdminLog } from '../utils/helpers';
@@ -66,6 +66,76 @@ adminSystemRouter.put('/settings', async (c) => {
       target: systemSettings.key,
       set: { value: JSON.stringify(merged), updatedAt: now },
     });
+
+  if (Array.isArray(incoming.coupons) || Array.isArray(merged.coupons)) {
+    const existingCouponRows = await db.select().from(coupons);
+    const existingByCode = new Map<string, typeof coupons.$inferSelect>();
+    for (const row of existingCouponRows) {
+      const codeKey = String(row.code || '').trim().toUpperCase();
+      if (codeKey) {
+        existingByCode.set(codeKey, row);
+      }
+    }
+
+    const incomingCodes = new Set<string>();
+    const couponList = Array.isArray(merged.coupons) ? merged.coupons : [];
+
+    for (const cp of couponList) {
+      const normalizedCode = String(cp?.code || '').trim().toUpperCase();
+      if (!normalizedCode || incomingCodes.has(normalizedCode)) continue;
+      incomingCodes.add(normalizedCode);
+
+      const existing = existingByCode.get(normalizedCode);
+      const discountType = cp.discountType === 'fixed' ? 'fixed' : 'percentage';
+      const discountValue = Number(cp.discountValue || 0);
+      const minOrderAmount = cp.minOrderAmount != null ? Number(cp.minOrderAmount) : 0;
+      const maxDiscountAmount = cp.maxDiscountAmount != null ? Number(cp.maxDiscountAmount) : null;
+      const usageLimit = cp.usageLimit != null ? Number(cp.usageLimit) : null;
+      const expiresAt = cp.expiresAt ? String(cp.expiresAt) : null;
+      const isActive = Boolean(cp.isActive);
+
+      if (existing) {
+        await db
+          .update(coupons)
+          .set({
+            code: normalizedCode,
+            discountType,
+            discountValue,
+            minOrderAmount,
+            maxDiscountAmount,
+            usageLimit,
+            expiresAt,
+            isActive,
+          })
+          .where(eq(coupons.id, existing.id));
+      } else {
+        await db.insert(coupons).values({
+          id: `cp-${normalizedCode.toLowerCase()}-${Date.now()}`,
+          code: normalizedCode,
+          discountType,
+          discountValue,
+          minOrderAmount,
+          maxDiscountAmount,
+          usageLimit,
+          usedCount: 0,
+          expiresAt,
+          isActive,
+          createdAt: now,
+        });
+      }
+    }
+
+    for (const row of existingCouponRows) {
+      const codeKey = String(row.code || '').trim().toUpperCase();
+      if (!incomingCodes.has(codeKey)) {
+        if (Number(row.usedCount || 0) === 0) {
+          await db.delete(coupons).where(eq(coupons.id, row.id));
+        } else if (row.isActive) {
+          await db.update(coupons).set({ isActive: false }).where(eq(coupons.id, row.id));
+        }
+      }
+    }
+  }
 
   await appendAdminLog(
     db,

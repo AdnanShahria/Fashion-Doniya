@@ -47,8 +47,8 @@ api.interceptors.request.use((config) => {
     delete config.headers['Content-Type'];
   }
 
-  if (isAdminRoute) {
-    const adminToken = getAdminAuthToken();
+  const adminToken = getAdminAuthToken();
+  if (isAdminRoute || (url.includes('/orders/sync-client') && adminToken)) {
     if (adminToken) {
       config.headers.Authorization = `Bearer ${adminToken}`;
     }
@@ -95,6 +95,29 @@ api.interceptors.response.use(
         window.dispatchEvent(
           new CustomEvent('admin-unauthorized', {
             detail: { message: error?.response?.data?.message || 'সেশন মেয়াদ শেষ হয়েছে, অনুগ্রহ করে পুনরায় লগইন করুন।' },
+          })
+        );
+      } else if (
+        status === 401 &&
+        !isAdminCall &&
+        !url.includes('/auth/login') &&
+        !url.includes('/auth/register') &&
+        !url.includes('/auth/forgot-password') &&
+        !url.includes('/auth/reset-password')
+      ) {
+        try {
+          localStorage.removeItem(AUTH_STORAGE_KEY);
+          localStorage.removeItem('fashion_doniya_current_user');
+        } catch {
+          // ignore
+        }
+        window.dispatchEvent(
+          new CustomEvent('customer-unauthorized', {
+            detail: {
+              message:
+                error?.response?.data?.message ||
+                'আপনার সেশনের মেয়াদ শেষ হয়েছে, অনুগ্রহ করে পুনরায় লগইন করুন।',
+            },
           })
         );
       } else if (

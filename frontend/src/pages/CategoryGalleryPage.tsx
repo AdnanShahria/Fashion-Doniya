@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { Link } from 'react-router';
 import { useStore } from '../context/StoreContext';
 import { ProductCard } from '../components/common/ProductCard';
 import { OrangeBackButton } from '../components/common/OrangeBackButton';
@@ -97,8 +98,7 @@ export const CategoryGalleryPage: React.FC<CategoryGalleryPageProps> = ({
       }
       return false;
     });
-    if (exact.length > 0) return exact;
-    return products.filter((p) => p.isActive && p.fabricWidth === width);
+    return exact;
   }, [products, width, normalizedSlug, currentCategoryRecord]);
 
   const filteredProducts = useMemo(() => {
@@ -141,8 +141,8 @@ export const CategoryGalleryPage: React.FC<CategoryGalleryPageProps> = ({
 
         {/* Independent Bahar Switcher for this Category */}
         <div className="inline-flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-full bg-[#FFFDF9] border border-[#D5A64A]/45 shadow-2xs shrink-0">
-          <button
-            onClick={() => navigateTo('category-gallery', { width: '3.5', category: normalizedSlug })}
+          <Link
+            to={`/fabric/3.5-bahar/${encodeURIComponent(normalizedSlug)}`}
             className={`px-2.5 min-[375px]:px-3.5 sm:px-4 py-1 sm:py-1.5 rounded-full text-[11px] min-[375px]:text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
               width === '3.5'
                 ? 'bg-[#850B1B] text-white shadow-xs'
@@ -150,9 +150,9 @@ export const CategoryGalleryPage: React.FC<CategoryGalleryPageProps> = ({
             }`}
           >
             ৩.৫ হাত বহর
-          </button>
-          <button
-            onClick={() => navigateTo('category-gallery', { width: '2.5', category: normalizedSlug })}
+          </Link>
+          <Link
+            to={`/fabric/2.5-bahar/${encodeURIComponent(normalizedSlug)}`}
             className={`px-2.5 min-[375px]:px-3.5 sm:px-4 py-1 sm:py-1.5 rounded-full text-[11px] min-[375px]:text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
               width === '2.5'
                 ? 'bg-[#850B1B] text-white shadow-xs'
@@ -160,7 +160,7 @@ export const CategoryGalleryPage: React.FC<CategoryGalleryPageProps> = ({
             }`}
           >
             ২.৫ হাত বহর
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -172,9 +172,9 @@ export const CategoryGalleryPage: React.FC<CategoryGalleryPageProps> = ({
             const catNormalized = measurementService.resolveCategorySlug(cat.slug);
             const active = catNormalized === normalizedSlug;
             return (
-              <button
+              <Link
                 key={cat.id}
-                onClick={() => navigateTo('category-gallery', { width, category: cat.slug })}
+                to={`/fabric/${width}-bahar/${encodeURIComponent(cat.slug)}`}
                 className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0 border ${
                   active
                     ? 'bg-[#850B1B] text-white border-[#850B1B] shadow-2xs'
@@ -191,7 +191,7 @@ export const CategoryGalleryPage: React.FC<CategoryGalleryPageProps> = ({
                     {cat.standardYards}
                   </span>
                 )}
-              </button>
+              </Link>
             );
           })}
         </div>

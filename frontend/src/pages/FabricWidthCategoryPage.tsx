@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { Link } from 'react-router';
 import { useStore } from '../context/StoreContext';
 import { ProductCard } from '../components/common/ProductCard';
 import { OrangeBackButton } from '../components/common/OrangeBackButton';
@@ -97,9 +98,8 @@ export const FabricWidthCategoryPage: React.FC<FabricWidthCategoryPageProps> = (
 
           {/* Clearly Highlighted Active Bahar Switcher on Top Right */}
           <div className="inline-flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 bg-[#FFFDF9] border border-[#E2D0B8] rounded-full shadow-[0_2px_8px_rgba(107,8,18,0.05)] shrink-0">
-            <button
-              type="button"
-              onClick={() => navigateTo('fabric-width', { width: '3.5' })}
+            <Link
+              to="/fabric/3.5-bahar"
               className={`px-2.5 min-[375px]:px-3.5 sm:px-4 py-1 sm:py-1.5 rounded-full text-[11px] min-[375px]:text-xs sm:text-sm font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer ${
                 is35
                   ? 'bg-[#6B0812] text-white shadow-[0_2px_8px_rgba(107,8,18,0.22)]'
@@ -107,10 +107,9 @@ export const FabricWidthCategoryPage: React.FC<FabricWidthCategoryPageProps> = (
               }`}
             >
               ৩.৫ বহর কাপড়
-            </button>
-            <button
-              type="button"
-              onClick={() => navigateTo('fabric-width', { width: '2.5' })}
+            </Link>
+            <Link
+              to="/fabric/2.5-bahar"
               className={`px-2.5 min-[375px]:px-3.5 sm:px-4 py-1 sm:py-1.5 rounded-full text-[11px] min-[375px]:text-xs sm:text-sm font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer ${
                 !is35
                   ? 'bg-[#6B0812] text-white shadow-[0_2px_8px_rgba(107,8,18,0.22)]'
@@ -118,7 +117,7 @@ export const FabricWidthCategoryPage: React.FC<FabricWidthCategoryPageProps> = (
               }`}
             >
               ২.৫ বহর কাপড়
-            </button>
+            </Link>
           </div>
         </div>
 

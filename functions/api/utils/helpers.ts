@@ -20,13 +20,15 @@ export function normalizePhone(rawPhone: string): string {
 }
 
 export function slugify(input: string): string {
-  return String(input || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s-]/gu, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '') || 'item';
+  return (
+    String(input || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^\p{L}\p{M}\p{N}\s-]/gu, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || 'item'
+  );
 }
 
 export function escapeHtml(input: unknown): string {

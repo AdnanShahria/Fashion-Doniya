@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type { AppEnv, Bindings } from '../types';
+import { authRateLimiter } from '../utils/rateLimiter';
 
 export const aiRouter = new Hono<AppEnv>();
 
@@ -78,6 +79,42 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+function isBlockedHost(rawHostname: string): boolean {
+  const host = rawHostname.trim().toLowerCase().replace(/^\[|\]$/g, '');
+  if (!host) return true;
+  if (
+    host === 'localhost' ||
+    host.endsWith('.localhost') ||
+    host.endsWith('.local') ||
+    host.endsWith('.internal') ||
+    host === '0.0.0.0' ||
+    host === '::1' ||
+    host === '::' ||
+    host.startsWith('fe80:') ||
+    host.startsWith('fc') ||
+    host.startsWith('fd')
+  ) {
+    return true;
+  }
+  const ipv4Part = host.startsWith('::ffff:') ? host.slice(7) : host;
+  const ipv4Match = ipv4Part.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4Match) {
+    const a = Number(ipv4Match[1]);
+    const b = Number(ipv4Match[2]);
+    if (
+      a === 0 ||
+      a === 127 ||
+      a === 10 ||
+      (a === 192 && b === 168) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 async function resolveImageData(
   imageRef: string
 ): Promise<{ base64Data: string; mimeType: string } | null> {
@@ -91,8 +128,21 @@ async function resolveImageData(
 
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     try {
-      const resp = await fetch(trimmed);
+      const parsed = new URL(trimmed);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return null;
+      }
+      if (isBlockedHost(parsed.hostname)) {
+        return null;
+      }
+      const resp = await fetch(parsed.toString());
       if (resp.ok) {
+        if (resp.url) {
+          const finalUrl = new URL(resp.url);
+          if (isBlockedHost(finalUrl.hostname)) {
+            return null;
+          }
+        }
         const buf = new Uint8Array(await resp.arrayBuffer());
         return {
           mimeType: resp.headers.get('content-type') || 'image/jpeg',
@@ -181,7 +231,7 @@ aiRouter.get('/status', (c) => {
   });
 });
 
-aiRouter.post('/fabric-to-outfit', async (c) => {
+aiRouter.post('/fabric-to-outfit', authRateLimiter, async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as {
     fabricImage?: string;
     categories?: string[];
@@ -220,7 +270,7 @@ aiRouter.post('/fabric-to-outfit', async (c) => {
   return c.json({ success: true, designs });
 });
 
-aiRouter.post('/fabric-to-outfit/single', async (c) => {
+aiRouter.post('/fabric-to-outfit/single', authRateLimiter, async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as {
     fabricImage?: string;
     category?: string;

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useParams, Link } from 'react-router';
 import { useStore } from '../context/StoreContext';
+import { api } from '../services/api';
 import { FabricPatternVisual, StudioViewAngle } from '../components/common/FabricPatternVisual';
 import { ProductCard } from '../components/common/ProductCard';
 import { OrangeBackButton } from '../components/common/OrangeBackButton';
@@ -9,6 +11,7 @@ import {
   CUSTOM_MEASUREMENT_FIELDS
 } from '../services/measurementService';
 import {
+  Product,
   CategoryMeasurementGuideRecord,
   CustomerCustomMeasurements,
   CustomMeasurementFieldKey,
@@ -235,6 +238,7 @@ const resolveColorSwatch = (colorName: string, fallbackHex?: string): string => 
 };
 
 export const ProductDetailsPage: React.FC = () => {
+  const { slug: routeSlug } = useParams<{ slug?: string }>();
   const {
     selectedProductId,
     products,
@@ -245,9 +249,57 @@ export const ProductDetailsPage: React.FC = () => {
     showToast
   } = useStore();
 
-  const product = useMemo(() => {
-    return products.find((p) => p.id === selectedProductId) || products[0];
-  }, [products, selectedProductId]);
+  const targetKey = routeSlug || selectedProductId;
+
+  const matchedInStore = useMemo(() => {
+    if (!targetKey) {
+      return products[0] || null;
+    }
+    return products.find((p) => p.id === targetKey || p.slug === targetKey) || null;
+  }, [products, targetKey]);
+
+  const [fetchedProduct, setFetchedProduct] = useState<Product | null>(null);
+  const [isLoadingProduct, setIsLoadingProduct] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!targetKey || matchedInStore) {
+      setFetchedProduct(null);
+      setIsLoadingProduct(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingProduct(true);
+    setFetchedProduct(null);
+
+    api
+      .get<{ success?: boolean; product?: Product }>(`/products/${encodeURIComponent(targetKey)}`)
+      .then((res) => {
+        if (!cancelled) {
+          if (res.data?.success && res.data.product) {
+            setFetchedProduct(res.data.product);
+          } else {
+            setFetchedProduct(null);
+          }
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFetchedProduct(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingProduct(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [targetKey, matchedInStore]);
+
+  const product = targetKey ? (matchedInStore || fetchedProduct) : (products[0] || null);
 
   const catSlug = useMemo(
     () => (product ? measurementService.resolveCategorySlug(product.category) : 'kamiz'),
@@ -303,6 +355,9 @@ export const ProductDetailsPage: React.FC = () => {
     sleeve: '',
     shoulder: ''
   });
+  const [measurementErrors, setMeasurementErrors] = useState<
+    Partial<Record<CustomMeasurementFieldKey, string>>
+  >({});
   const [customizationNotes, setCustomizationNotes] = useState<string>('');
   const [standardQuantity, setStandardQuantity] = useState<number>(1);
   const [additionalItemCounts, setAdditionalItemCounts] = useState<Record<string, number>>({});
@@ -398,6 +453,7 @@ export const ProductDetailsPage: React.FC = () => {
         sleeve: '',
         shoulder: ''
       });
+      setMeasurementErrors({});
       setCustomizationNotes('');
       setYards(initialGaj);
       setSelectedColor(product.color);
@@ -432,15 +488,6 @@ export const ProductDetailsPage: React.FC = () => {
     return () => window.removeEventListener('fabric-measurements-updated', handleGuideRefresh);
   }, [product]);
 
-  if (!product) {
-    return (
-      <div className="max-w-3xl mx-auto px-4 py-16 text-center space-y-4">
-        <p className="text-lg font-bold text-[#1C1B19]">পণ্যটি খুঁজে পাওয়া যায়নি</p>
-        <OrangeBackButton label="হোমে ফিরে যান" onClick={() => navigateTo('home')} />
-      </div>
-    );
-  }
-
   const extraAddonYards = useMemo(() => {
     let sum = 0;
     for (const item of ADDITIONAL_CLOTHING_OPTIONS) {
@@ -452,22 +499,7 @@ export const ProductDetailsPage: React.FC = () => {
     return Number(sum.toFixed(2));
   }, [additionalItemCounts]);
 
-  const combinedTotalYards = Number((yards + extraAddonYards).toFixed(2));
-
-  const handleAdditionalItemToggle = (itemId: string, delta: number) => {
-    setAdditionalItemCounts((prev) => {
-      const current = prev[itemId] || 0;
-      const next = Math.max(0, Math.min(10, current + delta));
-      return { ...prev, [itemId]: next };
-    });
-  };
-
-  const effectivePrice = product.discountPrice || product.pricePerYard;
-  const mainFabricBreakdown = measurementService.calculateCustomFabricPrice(
-    product,
-    yards,
-    customConfig
-  );
+  const effectivePrice = product ? (product.discountPrice || product.pricePerYard) : 0;
 
   const addonTotalPrice = useMemo(() => {
     let sum = 0;
@@ -482,6 +514,40 @@ export const ProductDetailsPage: React.FC = () => {
     }
     return sum;
   }, [additionalItemCounts, selectedAddonFabrics, effectivePrice]);
+
+  if (isLoadingProduct && !product) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-20 flex flex-col items-center justify-center gap-3 text-center">
+        <div className="w-8 h-8 border-2 border-[#850B1B] border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm font-medium text-[#1C1B19]/75">পণ্যের তথ্য লোড হচ্ছে...</p>
+      </div>
+    );
+  }
+
+  if (!product) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-16 text-center space-y-4">
+        <p className="text-lg font-bold text-[#1C1B19]">পণ্যটি খুঁজে পাওয়া যায়নি</p>
+        <OrangeBackButton label="হোমে ফিরে যান" onClick={() => navigateTo('home')} />
+      </div>
+    );
+  }
+
+  const combinedTotalYards = Number((yards + extraAddonYards).toFixed(2));
+
+  const handleAdditionalItemToggle = (itemId: string, delta: number) => {
+    setAdditionalItemCounts((prev) => {
+      const current = prev[itemId] || 0;
+      const next = Math.max(0, Math.min(10, current + delta));
+      return { ...prev, [itemId]: next };
+    });
+  };
+
+  const mainFabricBreakdown = measurementService.calculateCustomFabricPrice(
+    product,
+    yards,
+    customConfig
+  );
 
   const priceBreakdown = measurementService.calculateCustomFabricPrice(
     product,
@@ -536,6 +602,33 @@ export const ProductDetailsPage: React.FC = () => {
       ...prev,
       [key]: value
     }));
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setMeasurementErrors((prev) => {
+        if (!prev[key]) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      return;
+    }
+
+    const asciiVal = trimmed.replace(/[০-৯]/g, (ch) => String('০১২৩৪৫৬৭৮৯'.indexOf(ch)));
+    const num = Number(asciiVal);
+    if (!/^\d+(\.\d{1,2})?$/.test(asciiVal) || Number.isNaN(num) || num <= 0 || num > 120) {
+      setMeasurementErrors((prev) => ({
+        ...prev,
+        [key]: 'সঠিক ইঞ্চি মাপ দিন (১–১২০)'
+      }));
+    } else {
+      setMeasurementErrors((prev) => {
+        if (!prev[key]) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
   };
 
   const maxStandardQuantity = Math.max(
@@ -735,7 +828,7 @@ export const ProductDetailsPage: React.FC = () => {
                   {slide.type === 'image' ? (
                     <img
                       src={slide.src}
-                      alt={product.name}
+                      alt={product.imageAlt || product.name}
                       referrerPolicy="no-referrer"
                       draggable={false}
                       className="w-full h-full object-cover"
@@ -1174,6 +1267,47 @@ export const ProductDetailsPage: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Body Measurement Inputs Grid (chest, waist, hip, length, sleeve, shoulder) */}
+                  {applicableMeasurementFields.length > 0 && (
+                    <div className="space-y-2 pt-1 border-t border-[#EDE5D9]">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] sm:text-xs font-bold text-[#1C1B19] flex items-center gap-1.5">
+                          <Ruler className="w-3.5 h-3.5 text-[#850B1B]" />
+                          <span>আপনার শরীরের মাপ দিন (ইঞ্চিতে, ঐচ্ছিক):</span>
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                        {applicableMeasurementFields.map((field) => {
+                          const err = measurementErrors[field.key];
+                          return (
+                            <div key={field.key} className="space-y-1">
+                              <label className="text-[10px] sm:text-[11px] font-semibold text-[#1C1B19]/80 block">
+                                {field.labelBn}
+                              </label>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={customMeasurements[field.key] || ''}
+                                onChange={(e) => handleMeasurementInput(field.key, e.target.value)}
+                                placeholder={field.placeholder}
+                                className={`w-full px-2.5 py-1.5 bg-[#FAF8F4] border rounded-md text-xs text-[#1C1B19] focus:outline-hidden ${
+                                  err
+                                    ? 'border-rose-500 bg-rose-50/30'
+                                    : 'border-[#DCD3C2] focus:border-[#850B1B]'
+                                }`}
+                              />
+                              {err && (
+                                <p className="text-[10px] text-rose-600 font-medium leading-tight">
+                                  {err}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Optional Customization Notes */}
                   <div className="space-y-1">
                     <label className="text-[10px] sm:text-[11px] font-semibold text-[#1C1B19]/80 block">
@@ -1361,17 +1495,12 @@ export const ProductDetailsPage: React.FC = () => {
                 আপনার পছন্দ হতে পারে এমন আরও কাপড় ({product.fabricWidth} হাত বহর)
               </h2>
             </div>
-            <button
-              onClick={() =>
-                navigateTo('category-gallery', {
-                  width: product.fabricWidth,
-                  category: catSlug
-                })
-              }
+            <Link
+              to={`/fabric/${product.fabricWidth}-bahar/${catSlug}`}
               className="text-xs sm:text-sm font-semibold text-[#850B1B] hover:underline cursor-pointer shrink-0"
             >
               সব দেখুন →
-            </button>
+            </Link>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-6 lg:gap-8">
@@ -1421,7 +1550,7 @@ export const ProductDetailsPage: React.FC = () => {
               {currentSlide?.type === 'image' ? (
                 <img
                   src={currentSlide.src}
-                  alt={product.name}
+                  alt={product.imageAlt || product.name}
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-contain bg-[#F3EFE6]"
                 />

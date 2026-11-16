@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { api, ADMIN_SESSION_STORAGE_KEY } from '../../services/api';
+import { apiCache } from '../../services/apiCache';
 import { orderService } from '../../services/orderService';
 import { AdminTab } from '../../types';
 import { AdminOverview } from './AdminOverview';
@@ -242,8 +243,13 @@ export const AdminLayout: React.FC = () => {
   };
 
   const handleLogout = () => {
+    api.post('/admin/auth/logout').catch(() => {});
+    apiCache.invalidatePrefix();
     setAuthSession(null);
     localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+    localStorage.removeItem('fashion_doniya_orders');
+    localStorage.removeItem('fashion_doniya_order_tracking_history');
+    localStorage.removeItem('fashion_doniya_courier_information');
     showToast('অ্যাডমিন প্যানেল থেকে লগআউট সম্পন্ন হয়েছে', 'info');
   };
 

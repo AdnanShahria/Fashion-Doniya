@@ -76,6 +76,7 @@ export interface ProductCustomizationPayload {
 
 export interface Product {
   id: string;
+  slug?: string;
   name: string;
   nameEn?: string;
   description: string;
@@ -455,6 +456,7 @@ export interface CourierInformation {
 export interface Order {
   id: string;
   orderNumber: string; // e.g. FD-2026-1082
+  userId?: string;
   customer: {
     fullName: string;
     phone: string;
@@ -496,6 +498,10 @@ export interface Coupon {
   discountType: 'percentage' | 'fixed';
   discountValue: number;
   minOrderAmount?: number;
+  maxDiscountAmount?: number;
+  usageLimit?: number;
+  usedCount?: number;
+  expiresAt?: string;
   isActive: boolean;
   description: string;
 }
@@ -793,11 +799,15 @@ export interface CustomerUser {
   phone: string;
   altPhone?: string;
   email?: string;
+  role?: 'user' | 'admin' | 'super_admin' | 'sysadm';
   district?: string;
   upazila?: string;
   fullAddress?: string;
   status?: 'active' | 'blocked';
   notes?: string;
+  walletBalance?: number;
+  totalOrders?: number;
+  totalSpent?: number;
   address?: {
     district: string;
     upazila: string;

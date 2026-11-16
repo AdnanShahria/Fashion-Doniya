@@ -41,11 +41,12 @@ import {
   INITIAL_NAVIGATION_CONFIG,
   createInitialFabricCollectionsState,
 } from '../../../frontend/src/data/seedData';
-import { safeJsonParse } from './helpers';
+import { safeJsonParse, slugify } from './helpers';
 
 export function mapProductRow(row: typeof products.$inferSelect): Product {
   return {
     id: row.id,
+    slug: row.slug || slugify(row.nameEn || row.name) || row.id,
     name: row.name,
     nameEn: row.nameEn || undefined,
     description: row.description,
@@ -288,6 +289,7 @@ export async function hydrateOrderRow(
   return {
     id: row.id,
     orderNumber: row.orderNumber,
+    userId: row.userId || undefined,
     customer: safeJsonParse(row.customer, {
       fullName: 'Guest',
       phone: '',
@@ -374,6 +376,7 @@ export async function getAllOrdersHydrated(db: AppDatabase): Promise<{
     return {
       id: row.id,
       orderNumber: row.orderNumber,
+      userId: row.userId || undefined,
       customer: safeJsonParse(row.customer, {
         fullName: 'Guest',
         phone: '',

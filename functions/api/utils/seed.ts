@@ -39,11 +39,12 @@ import {
   INITIAL_CATEGORY_MEASUREMENT_GUIDES,
   createInitialFabricCollectionsState,
 } from '../../../frontend/src/data/seedData';
+import type { CustomerUser } from '../../../frontend/src/types/index';
 import { hashPassword } from './auth-helper';
 import { normalizePhone, slugify } from './helpers';
 
 const SEED_MARKER_KEY = 'seed.version';
-const SEED_VERSION = 'v1';
+const SEED_VERSION = 'v2';
 let seedPromise: Promise<void> | null = null;
 
 export async function ensureSeeded(db: AppDatabase, env?: Bindings): Promise<void> {
@@ -78,7 +79,7 @@ async function runEnsureSeeded(db: AppDatabase, env?: Bindings): Promise<void> {
         .insert(products)
         .values({
           id: p.id,
-          slug: p.id || slugify(p.nameEn || p.name),
+          slug: slugify(p.nameEn || p.name) || p.id,
           name: p.name,
           nameEn: p.nameEn || null,
           description: p.description,
@@ -115,6 +116,21 @@ async function runEnsureSeeded(db: AppDatabase, env?: Bindings): Promise<void> {
         })
         .onConflictDoNothing();
     }
+  } else {
+    for (const p of INITIAL_PRODUCTS) {
+      const targetSlug = slugify(p.nameEn || p.name) || p.id;
+      const existingProd = await db
+        .select({ id: products.id, slug: products.slug })
+        .from(products)
+        .where(eq(products.id, p.id))
+        .get();
+      if (existingProd && existingProd.slug === existingProd.id && targetSlug !== existingProd.slug) {
+        await db
+          .update(products)
+          .set({ slug: targetSlug, updatedAt: now })
+          .where(eq(products.id, p.id));
+      }
+    }
   }
 
   const existingCats = await db.select({ id: categories.id }).from(categories).limit(1);
@@ -136,6 +152,21 @@ async function runEnsureSeeded(db: AppDatabase, env?: Bindings): Promise<void> {
           updatedAt: now,
         })
         .onConflictDoNothing();
+    }
+  } else {
+    for (const p of INITIAL_PRODUCTS) {
+      const targetSlug = slugify(p.nameEn || p.name) || p.id;
+      const existingProd = await db
+        .select({ id: products.id, slug: products.slug })
+        .from(products)
+        .where(eq(products.id, p.id))
+        .get();
+      if (existingProd && existingProd.slug === existingProd.id && targetSlug !== existingProd.slug) {
+        await db
+          .update(products)
+          .set({ slug: targetSlug, updatedAt: now })
+          .where(eq(products.id, p.id));
+      }
     }
   }
 
@@ -264,9 +295,37 @@ async function runEnsureSeeded(db: AppDatabase, env?: Bindings): Promise<void> {
   }
 
   // Customers
+  const demoCustomerDefaults: CustomerUser = {
+    id: 'cust-1',
+    fullName: 'নুসরাত জাহান',
+    phone: '01711223344',
+    email: '01711223344@fashiondoniya.com',
+    status: 'active' as const,
+    district: 'ঢাকা',
+    upazila: 'ধানমন্ডি',
+    address: {
+      district: 'ঢাকা',
+      upazila: 'ধানমন্ডি',
+      area: 'রোড ৮',
+      fullAddress: 'ফ্ল্যাট ৪বি, বাড়ি ২৭, রোড ৮, ধানমন্ডি, ঢাকা',
+    },
+    fullAddress: 'ফ্ল্যাট ৪বি, বাড়ি ২৭, রোড ৮, ধানমন্ডি, ঢাকা',
+    createdAt: now,
+    updatedAt: now,
+  };
+  const customersToSeed =
+    INITIAL_CUSTOMERS.length > 0
+      ? INITIAL_CUSTOMERS.some(
+          (c) => c.id === 'cust-1' || normalizePhone(c.phone) === '01711223344'
+        )
+        ? INITIAL_CUSTOMERS
+        : [demoCustomerDefaults, ...INITIAL_CUSTOMERS]
+      : [demoCustomerDefaults];
+
   const existingUsers = await db.select({ id: users.id }).from(users).limit(1);
   if (existingUsers.length === 0) {
-    for (const c of INITIAL_CUSTOMERS) {
+    const { salt: cSalt, hash: cHash } = await hashPassword('123456');
+    for (const c of customersToSeed) {
       await db
         .insert(users)
         .values({
@@ -274,6 +333,8 @@ async function runEnsureSeeded(db: AppDatabase, env?: Bindings): Promise<void> {
           fullName: c.fullName,
           phone: normalizePhone(c.phone),
           email: c.email || null,
+          passwordHash: cHash,
+          passwordSalt: cSalt,
           role: 'user',
           status: c.status || 'active',
           district: c.district || c.address?.district || null,
@@ -286,6 +347,42 @@ async function runEnsureSeeded(db: AppDatabase, env?: Bindings): Promise<void> {
           totalSpent: 0,
           createdAt: c.createdAt || now,
           updatedAt: c.updatedAt || now,
+        })
+        .onConflictDoNothing();
+    }
+  } else {
+    const demoUserById = await db.select().from(users).where(eq(users.id, 'cust-1')).get();
+    const demoUserByPhone =
+      demoUserById || (await db.select().from(users).where(eq(users.phone, '01711223344')).get());
+    if (demoUserByPhone && (!demoUserByPhone.passwordHash || !demoUserByPhone.passwordSalt)) {
+      const { salt: cSalt, hash: cHash } = await hashPassword('123456');
+      await db
+        .update(users)
+        .set({ passwordHash: cHash, passwordSalt: cSalt, updatedAt: now })
+        .where(eq(users.id, demoUserByPhone.id));
+    } else if (!demoUserByPhone) {
+      const { salt: cSalt, hash: cHash } = await hashPassword('123456');
+      await db
+        .insert(users)
+        .values({
+          id: demoCustomerDefaults.id,
+          fullName: demoCustomerDefaults.fullName,
+          phone: demoCustomerDefaults.phone,
+          email: demoCustomerDefaults.email,
+          passwordHash: cHash,
+          passwordSalt: cSalt,
+          role: 'user',
+          status: demoCustomerDefaults.status,
+          district: demoCustomerDefaults.district,
+          upazila: demoCustomerDefaults.upazila,
+          area: demoCustomerDefaults.address?.area || null,
+          fullAddress: demoCustomerDefaults.fullAddress,
+          savedMeasurements: null,
+          walletBalance: 0,
+          totalOrders: 0,
+          totalSpent: 0,
+          createdAt: now,
+          updatedAt: now,
         })
         .onConflictDoNothing();
     }
@@ -465,9 +562,19 @@ async function runEnsureSeeded(db: AppDatabase, env?: Bindings): Promise<void> {
   ];
 
   for (const entry of settingsEntries) {
-    await db
-      .insert(systemSettings)
-      .values({ key: entry.key, value: entry.value, updatedAt: now })
-      .onConflictDoNothing();
+    if (entry.key === SEED_MARKER_KEY) {
+      await db
+        .insert(systemSettings)
+        .values({ key: entry.key, value: entry.value, updatedAt: now })
+        .onConflictDoUpdate({
+          target: systemSettings.key,
+          set: { value: entry.value, updatedAt: now },
+        });
+    } else {
+      await db
+        .insert(systemSettings)
+        .values({ key: entry.key, value: entry.value, updatedAt: now })
+        .onConflictDoNothing();
+    }
   }
 }

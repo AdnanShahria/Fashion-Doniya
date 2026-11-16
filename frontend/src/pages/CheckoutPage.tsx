@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useStore } from '../context/StoreContext';
 import { OrangeBackButton } from '../components/common/OrangeBackButton';
 import { orderService } from '../services/orderService';
+import { productService } from '../services/productService';
 import { settingsService, formatAccountTypeBadge, formatAccountActionLabelBn } from '../services/settingsService';
 import { StorageService } from '../services/storageService';
 import { FabricPatternVisual } from '../components/common/FabricPatternVisual';
@@ -33,6 +34,7 @@ export const CheckoutPage: React.FC = () => {
     setLastCompletedOrder, 
     navigateTo, 
     showToast,
+    refreshData,
     currentUser 
   } = useStore();
 
@@ -199,7 +201,7 @@ export const CheckoutPage: React.FC = () => {
     return Object.keys(errs).length === 0;
   };
 
-  const handlePlaceOrder = (e: React.FormEvent) => {
+  const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) {
       for (const item of checkoutItems) {
@@ -264,53 +266,59 @@ export const CheckoutPage: React.FC = () => {
         }
       : undefined;
 
-    const createdOrder = orderService.createOrder({
-      customer: {
-        fullName: fullName.trim(),
-        phone: phone.trim(),
-        altPhone: altPhone.trim() || undefined,
-        email: email.trim() || undefined,
-        district: district.trim(),
-        upazila: upazila.trim(),
-        area: area.trim(),
-        fullAddress: fullAddress.trim(),
-        deliveryNotes: deliveryNotes.trim() || undefined
-      },
-      items: orderItems,
-      subtotal,
-      deliveryCharge: effectiveDeliveryFee,
-      discount: discountAmount,
-      couponCode: appliedCoupon?.code,
-      grandTotal,
-      paymentMethod,
-      ...(paymentDetailsPayload ? { paymentDetails: paymentDetailsPayload } : {}),
-      paymentStatus: isManualMfs ? 'pending_verification' : 'unpaid',
-      orderStatus: 'Pending'
-    });
-
-    // Confetti celebration
     try {
-      confetti({
-        particleCount: 80,
-        spread: 60,
-        origin: { y: 0.6 }
+      const createdOrder = await orderService.createOrderAsync({
+        customer: {
+          fullName: fullName.trim(),
+          phone: phone.trim(),
+          altPhone: altPhone.trim() || undefined,
+          email: email.trim() || undefined,
+          district: district.trim(),
+          upazila: upazila.trim(),
+          area: area.trim(),
+          fullAddress: fullAddress.trim(),
+          deliveryNotes: deliveryNotes.trim() || undefined
+        },
+        items: orderItems,
+        subtotal,
+        deliveryCharge: effectiveDeliveryFee,
+        discount: discountAmount,
+        couponCode: appliedCoupon?.code,
+        grandTotal,
+        paymentMethod,
+        ...(paymentDetailsPayload ? { paymentDetails: paymentDetailsPayload } : {}),
+        paymentStatus: isManualMfs ? 'pending_verification' : 'unpaid',
+        orderStatus: 'Pending'
       });
+
+      // Confetti celebration
+      try {
+        confetti({
+          particleCount: 80,
+          spread: 60,
+          origin: { y: 0.6 }
+        });
+      } catch {
+        // ignore
+      }
+
+      // Clean up cart or buyNow
+      if (isDirectBuy) {
+        clearBuyNow();
+      } else {
+        clearCart();
+      }
+      clearCoupon(true);
+
+      setLastCompletedOrder(createdOrder);
+      productService.syncFromBackend().then(() => refreshData()).catch(() => {});
+      showToast(`অর্ডার সফল হয়েছে! অর্ডার আইডি: ${createdOrder.orderNumber}`, 'success');
+      navigateTo('order-confirmation');
     } catch (err) {
-      // ignore
+      showToast(err instanceof Error ? err.message : 'অর্ডার সম্পন্ন করা যায়নি।', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // Clean up cart or buyNow
-    if (isDirectBuy) {
-      clearBuyNow();
-    } else {
-      clearCart();
-    }
-    clearCoupon(true);
-
-    setLastCompletedOrder(createdOrder);
-    setIsSubmitting(false);
-    showToast(`অর্ডার সফল হয়েছে! অর্ডার আইডি: ${createdOrder.orderNumber}`, 'success');
-    navigateTo('order-confirmation');
   };
 
   // Dynamic footer summary label based on selected payment method
@@ -898,6 +906,21 @@ export const CheckoutPage: React.FC = () => {
                             <strong>নোট:</strong> {item.customizationNotes}
                           </div>
                         )}
+                      </div>
+                    )}
+                    {item.selectedAddons && item.selectedAddons.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {item.selectedAddons.map((addon, idx) => (
+                          <span
+                            key={`${addon.addonId}-${addon.fabricId}-${idx}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#FAF8F4] border border-[#EDE5D9] rounded text-[10px] text-[#242424]/80"
+                          >
+                            <span className="font-semibold text-[#850B1B]">{addon.addonName}</span>
+                            <span>· {addon.fabricName}</span>
+                            <span>×{addon.count}</span>
+                            <span className="font-bold text-[#242424] tabular-nums">(৳{addon.totalAddonPrice})</span>
+                          </span>
+                        ))}
                       </div>
                     )}
                   </div>

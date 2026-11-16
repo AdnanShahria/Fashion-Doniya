@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router';
 import { Product } from '../../types';
 import { useStore } from '../../context/StoreContext';
 import { getUniqueProductFabricImage } from '../home/allProductsImageGenerator';
@@ -36,6 +37,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     [product]
   );
 
+  const productHref = `/product/${encodeURIComponent(product.slug || product.id)}`;
+
   const handleCardClick = () => {
     navigateTo('product-details', { productId: product.id });
   };
@@ -50,14 +53,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       className="group h-full w-full min-w-0 box-border bg-[#FFFDF9] rounded-[18px] sm:rounded-2xl border border-[#E5D4BE] hover:border-[#C59B48] shadow-[0_2px_8px_-4px_rgba(36,22,20,0.06),0_10px_26px_-12px_rgba(107,8,18,0.10)] hover:shadow-[0_18px_40px_-14px_rgba(107,8,18,0.16)] transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-pointer sm:cursor-default"
     >
       {/* 1. High-Resolution Fabric Photography */}
-      <div
-        onClick={handleCardClick}
-        className="relative overflow-hidden rounded-t-[17px] sm:rounded-t-2xl cursor-pointer bg-[#F4ECE0]"
-      >
-        <div className="relative overflow-hidden w-full aspect-[1.24/1] sm:aspect-[4/3] bg-[#F3ECE0] select-none">
+      <div className="relative overflow-hidden rounded-t-[17px] sm:rounded-t-2xl cursor-pointer bg-[#F4ECE0]">
+        <Link
+          to={productHref}
+          onClick={(e) => e.stopPropagation()}
+          className="block relative overflow-hidden w-full aspect-[1.24/1] sm:aspect-[4/3] bg-[#F3ECE0] select-none"
+        >
           <img
             src={productImageUrl}
-            alt={product.name}
+            alt={product.imageAlt || product.name}
             referrerPolicy="no-referrer"
             loading="lazy"
             className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]"
@@ -66,7 +70,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             aria-hidden="true"
             className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/15 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"
           />
-        </div>
+        </Link>
 
         {/* Top-Left Width & Discount Badges (Desktop) */}
         <div className="hidden sm:flex absolute top-3 left-3 items-center gap-1.5 pointer-events-none">
@@ -138,18 +142,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             </span>
           </div>
 
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleCardClick();
-            }}
+          <Link
+            to={productHref}
+            onClick={(e) => e.stopPropagation()}
             className="w-8 h-8 rounded-full bg-[#6B0812] hover:bg-[#53050D] text-white flex items-center justify-center shrink-0 shadow-[0_3px_10px_rgba(107,8,18,0.22)] transition-transform active:scale-95 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
             aria-label="বিস্তারিত দেখুন"
             title="বিস্তারিত দেখুন"
           >
             <ArrowRight className="w-3.5 h-3.5 stroke-[2.2]" />
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -171,13 +172,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           </div>
 
           {/* Bengali Product Name (Consistent 2-Line Height) */}
-          <h3
-            onClick={handleCardClick}
-            className="text-[17px] lg:text-[18px] font-bold text-[#241614] group-hover:text-[#6B0812] transition-colors leading-snug cursor-pointer line-clamp-2 min-h-[2.8rem]"
-            title={product.name}
-          >
-            {product.name}
-          </h3>
+          <Link to={productHref} className="block">
+            <h3
+              className="text-[17px] lg:text-[18px] font-bold text-[#241614] group-hover:text-[#6B0812] transition-colors leading-snug cursor-pointer line-clamp-2 min-h-[2.8rem]"
+              title={product.name}
+            >
+              {product.name}
+            </h3>
+          </Link>
 
           {/* Available Color Information */}
           <div className="flex items-center justify-between gap-2 pt-0.5 text-[13px] text-[#523A35]">

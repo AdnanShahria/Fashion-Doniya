@@ -1,5 +1,9 @@
 import type { Context } from 'hono';
+import { eq } from 'drizzle-orm';
 import type { AppEnv, AuthUser, Bindings } from '../types';
+import { users, systemSettings } from '../../../backend/server/db/schemas/index';
+import { createDb } from './db-factory';
+import { safeJsonParse } from './helpers';
 
 const encoder = new TextEncoder();
 const DEV_FALLBACK_JWT_SECRET = 'dev-fashion-doniya-jwt-secret-change-in-production-64chars';
@@ -99,6 +103,20 @@ export async function verifyPassword(
   }
 }
 
+export function generateSecureOtp(): string {
+  const buf = new Uint32Array(1);
+  const range = 900000;
+  const limit = 0xffffffff - (0xffffffff % range);
+  do {
+    crypto.getRandomValues(buf);
+  } while (buf[0] >= limit);
+  return String(100000 + (buf[0] % range));
+}
+
+export function computePasswordVersion(hashOrSalt: string | null | undefined): string {
+  return (hashOrSalt || '').slice(0, 12);
+}
+
 export interface JwtClaims {
   sub: string;
   role: AuthUser['role'];
@@ -106,6 +124,7 @@ export interface JwtClaims {
   email?: string;
   fullName?: string;
   isDemo?: boolean;
+  pwdVer?: string;
   iat: number;
   exp: number;
 }
@@ -222,6 +241,42 @@ export async function resolveAuthContext(c: Context<AppEnv>): Promise<{
     if (claims) {
       const isAdminRole =
         claims.role === 'admin' || claims.role === 'super_admin' || claims.role === 'sysadm';
+
+      try {
+        const db = c.get('db') || createDb(env);
+        if (db) {
+          if (claims.role === 'user') {
+            const userRow = await db.select().from(users).where(eq(users.id, claims.sub)).get();
+            if (!userRow || userRow.status === 'blocked') {
+              return { user: null, isAdmin: false, isDemo: false };
+            }
+            if (
+              claims.pwdVer &&
+              userRow.passwordHash &&
+              claims.pwdVer !== computePasswordVersion(userRow.passwordHash)
+            ) {
+              return { user: null, isAdmin: false, isDemo: false };
+            }
+          } else if (isAdminRole && claims.sub === 'admin-primary') {
+            const row = await db
+              .select()
+              .from(systemSettings)
+              .where(eq(systemSettings.key, 'admin_account'))
+              .get();
+            const admin = safeJsonParse<{ passwordHash?: string } | null>(row?.value, null);
+            if (
+              claims.pwdVer &&
+              admin?.passwordHash &&
+              claims.pwdVer !== computePasswordVersion(admin.passwordHash)
+            ) {
+              return { user: null, isAdmin: false, isDemo: false };
+            }
+          }
+        }
+      } catch {
+        // Ignore DB resolution errors when DB is unavailable in isolated contexts
+      }
+
       return {
         user: {
           id: claims.sub,

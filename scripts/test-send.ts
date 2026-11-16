@@ -1,5 +1,8 @@
 import { sendEmail } from '../functions/api/utils/email';
 
+const senderEmail =
+  process.env.ORBITMAIL_FROM || process.env.EMAIL_FROM || 'contact@orbitsaas.cloud';
+
 const recipients = [
   'adnanshahria2019@gmail.com',
   'adnanshahria2006@gmail.com',
@@ -21,7 +24,7 @@ async function run() {
             <p style="color: #374151; font-size: 14px; line-height: 1.5;">This is a test notification verifying email dispatch from <strong>Fashion Doniya</strong> routed through centralized <strong>OrbitMail</strong> (<code>https://mail.orbitsaas.cloud</code>).</p>
             <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px 18px; border-radius: 8px; margin: 18px 0; font-size: 13px; color: #334155;">
               <p style="margin: 4px 0;"><strong>Recipient:</strong> ${to}</p>
-              <p style="margin: 4px 0;"><strong>Sender:</strong> notifications@fashion-doniya.com</p>
+              <p style="margin: 4px 0;"><strong>Sender:</strong> ${senderEmail}</p>
               <p style="margin: 4px 0;"><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
               <p style="margin: 4px 0;"><strong>Status:</strong> Accepted for delivery</p>
             </div>

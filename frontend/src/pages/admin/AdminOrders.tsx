@@ -379,7 +379,7 @@ export const AdminOrders: React.FC = () => {
             onClick={() => {
               setIsSyncingBackend(true);
               orderService
-                .syncWithBackend()
+                .syncAdminOrders()
                 .then((list) => {
                   setOrders(list);
                   showToast('ডাটাবেস সিঙ্ক সম্পন্ন হয়েছে', 'success');

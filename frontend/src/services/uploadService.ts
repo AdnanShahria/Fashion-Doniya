@@ -19,7 +19,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
  * Uploads an image file via the Admin R2 / ImgBB / Inline-Dev backend endpoint.
  * Falls back gracefully to a base64 DataURL if offline or backend upload fails.
  */
-export async function uploadAdminImage(file: File): Promise<string> {
+export async function uploadAdminImage(file: File, nameHint?: string): Promise<string> {
   if (!file.type.startsWith('image/')) {
     throw new Error('শুধুমাত্র বৈধ ছবির ফাইল (PNG, JPG, WEBP, GIF) আপলোড করা যাবে।');
   }
@@ -30,6 +30,9 @@ export async function uploadAdminImage(file: File): Promise<string> {
   try {
     const formData = new FormData();
     formData.append('file', file);
+    if (nameHint && nameHint.trim()) {
+      formData.append('nameHint', nameHint.trim());
+    }
     const res = await api.post<{ success?: boolean; url?: string; dataUrl?: string }>(
       '/admin/upload',
       formData

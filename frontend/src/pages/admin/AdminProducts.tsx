@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { productService } from '../../services/productService';
+import { categoryService } from '../../services/categoryService';
 import { uploadAdminImage } from '../../services/uploadService';
 import {
   CUSTOM_MEASUREMENT_FIELDS,
@@ -37,6 +38,7 @@ export const AdminProducts: React.FC = () => {
   const [formData, setFormData] = useState<Partial<Product>>({
     name: '',
     nameEn: '',
+    slug: '',
     description: '',
     sku: '',
     fabricWidth: '3.5',
@@ -65,6 +67,8 @@ export const AdminProducts: React.FC = () => {
     setFormData({
       id: `prod-${Date.now()}`,
       name: '',
+      nameEn: '',
+      slug: '',
       description: '',
       sku: `FD-${Math.floor(1000 + Math.random() * 9000)}`,
       fabricWidth: '3.5',
@@ -105,10 +109,11 @@ export const AdminProducts: React.FC = () => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
+    const nameHint = formData.nameEn || formData.name || formData.category;
     const uploadedUrls: string[] = [];
     for (const file of Array.from(files)) {
       try {
-        const url = await uploadAdminImage(file);
+        const url = await uploadAdminImage(file, nameHint);
         uploadedUrls.push(url);
       } catch (err) {
         showToast(
@@ -159,7 +164,7 @@ export const AdminProducts: React.FC = () => {
     showToast(`পণ্যটি ${updated.isActive ? 'সক্রিয়' : 'নিষ্ক্রিয়'} করা হয়েছে`, 'info');
   };
 
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name?.trim() || !formData.pricePerYard) {
       showToast('পণ্যের নাম ও দাম আবশ্যক', 'error');
@@ -168,8 +173,9 @@ export const AdminProducts: React.FC = () => {
 
     const productToSave: Product = {
       id: editingProduct ? editingProduct.id : `prod-${Date.now()}`,
+      slug: formData.slug?.trim() || undefined,
       name: formData.name.trim(),
-      nameEn: formData.nameEn?.trim(),
+      nameEn: formData.nameEn?.trim() || undefined,
       description: formData.description?.trim() || '',
       sku: formData.sku?.trim() || `FD-${Math.floor(1000 + Math.random() * 9000)}`,
       fabricWidth: (formData.fabricWidth as FabricWidth) || '3.5',
@@ -203,10 +209,17 @@ export const AdminProducts: React.FC = () => {
         )
     };
 
-    productService.saveProduct(productToSave);
-    refreshData();
-    setIsModalOpen(false);
-    showToast(editingProduct ? 'পণ্য সফলভাবে আপডেট হয়েছে!' : 'নতুন পণ্য যুক্ত হয়েছে!', 'success');
+    try {
+      await productService.saveProductAsync(productToSave);
+      refreshData();
+      setIsModalOpen(false);
+      showToast(editingProduct ? 'পণ্য সফলভাবে আপডেট হয়েছে!' : 'নতুন পণ্য যুক্ত হয়েছে!', 'success');
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : 'পণ্য সংরক্ষণ করা যায়নি',
+        'error'
+      );
+    }
   };
 
   const filteredProducts = products.filter(p => {
@@ -293,7 +306,7 @@ export const AdminProducts: React.FC = () => {
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-md overflow-hidden border border-[#EDE5D9] shrink-0 bg-[#FAF8F4]">
                           {firstImage ? (
-                            <img src={firstImage} alt={product.name} className="w-full h-full object-cover" />
+                            <img src={firstImage} alt={product.imageAlt || product.name} className="w-full h-full object-cover" />
                           ) : (
                             <FabricPatternVisual
                               patternType={product.patternType}
@@ -328,7 +341,7 @@ export const AdminProducts: React.FC = () => {
                     </td>
 
                     <td className="p-3 text-center tabular-nums">
-                      <span className={`font-semibold ${product.stockYards <= 100 ? 'text-rose-600' : 'text-[#242424]'}`}>
+                      <span className={`font-semibold ${product.stockYards <= 20 ? 'text-rose-600' : 'text-[#242424]'}`}>
                         {product.stockYards} গজ
                       </span>
                     </td>
@@ -401,6 +414,28 @@ export const AdminProducts: React.FC = () => {
                 </div>
 
                 <div>
+                  <label className="block font-semibold text-[#242424] mb-1">কাপড়ের ইংরেজি নাম (SEO Slug-এর জন্য)</label>
+                  <input
+                    type="text"
+                    value={formData.nameEn || ''}
+                    onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
+                    placeholder="e.g. Royal Jamdani Silk Fabric"
+                    className="w-full bg-[#FAF8F4] border border-[#EDE5D9] rounded-lg px-3 py-2 text-[#242424] focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-[#242424] mb-1">URL স্লাগ (ঐচ্ছিক - খালি রাখলে অটো তৈরি হবে)</label>
+                  <input
+                    type="text"
+                    value={formData.slug || ''}
+                    onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                    placeholder="royal-jamdani-silk-fabric"
+                    className="w-full bg-[#FAF8F4] border border-[#EDE5D9] rounded-lg px-3 py-2 font-mono text-[#242424] focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
                   <label className="block font-semibold text-[#242424] mb-1">SKU কোড</label>
                   <input
                     type="text"
@@ -430,12 +465,21 @@ export const AdminProducts: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     className="w-full bg-[#FAF8F4] border border-[#EDE5D9] rounded-lg px-3 py-2 text-[#242424] focus:outline-hidden"
                   >
-                    <option value="কামিজ">১. কামিজ</option>
-                    <option value="শার্ট কামিজ">২. শার্ট কামিজ</option>
-                    <option value="লং কটি">৩. লং কটি</option>
-                    <option value="গাউন / লেহেঙ্গা">৪. গাউন / লেহেঙ্গা</option>
-                    <option value="শাড়ি">৫. শাড়ি</option>
-                    <option value="কাস্টম ডিজাইন">৬. কাস্টম ডিজাইন</option>
+                    {Array.from(
+                      new Set([
+                        'কামিজ',
+                        'শার্ট কামিজ',
+                        'লং কটি',
+                        'গাউন / লেহেঙ্গা',
+                        'শাড়ি',
+                        'কাস্টম ডিজাইন',
+                        ...categoryService.getAllCategories().map((c) => c.name),
+                      ])
+                    ).map((catName) => (
+                      <option key={catName} value={catName}>
+                        {catName}
+                      </option>
+                    ))}
                   </select>
                 </div>
 

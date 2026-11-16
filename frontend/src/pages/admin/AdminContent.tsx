@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { settingsService } from '../../services/settingsService';
 import { api } from '../../services/api';
@@ -19,10 +19,21 @@ import {
 export const AdminContent: React.FC = () => {
   const { settings, refreshData, showToast } = useStore();
 
-  const [contentConfig, setContentConfig] = useState<WebsiteContentConfig>(() => {
+  const hasEditedRef = useRef(false);
+  const [contentConfig, setContentConfigRaw] = useState<WebsiteContentConfig>(() => {
     const existing = settings.contentConfig || INITIAL_CONTENT_CONFIG;
     return JSON.parse(JSON.stringify(existing));
   });
+  const setContentConfig: React.Dispatch<React.SetStateAction<WebsiteContentConfig>> = (val) => {
+    hasEditedRef.current = true;
+    setContentConfigRaw(val);
+  };
+
+  useEffect(() => {
+    if (!hasEditedRef.current && settings.contentConfig) {
+      setContentConfigRaw(JSON.parse(JSON.stringify(settings.contentConfig)));
+    }
+  }, [settings.contentConfig]);
 
   const [activeTab, setActiveTab] = useState<
     | 'about'
@@ -52,6 +63,7 @@ export const AdminContent: React.FC = () => {
   }, []);
 
   const handleSaveAllContent = () => {
+    hasEditedRef.current = false;
     settingsService.updateSettings({ contentConfig });
     refreshData();
     showToast('ওয়েবসাইটের পেজ ও কন্টেন্ট সফলভাবে সংরক্ষিত হয়েছে!', 'success');
@@ -430,6 +442,32 @@ export const AdminContent: React.FC = () => {
                       <p className="text-[#242424]/85">{msg.message}</p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      {msg.status !== 'read' ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            api
+                              .patch(`/admin/contact-messages/${encodeURIComponent(msg.id)}`, {
+                                status: 'read'
+                              })
+                              .then(() => {
+                                loadContactMessages();
+                                window.dispatchEvent(new CustomEvent('admin-stats-updated'));
+                                showToast('বার্তাটি পঠিত হিসেবে চিহ্নিত করা হয়েছে', 'success');
+                              })
+                              .catch(() => {
+                                showToast('বার্তাটি আপডেট করা যায়নি', 'error');
+                              });
+                          }}
+                          className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-md text-[11px] font-semibold cursor-pointer"
+                        >
+                          পঠিত করুন
+                        </button>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-white border border-[#EDE5D9] text-[#242424]/50 rounded text-[10px] font-medium">
+                          পঠিত
+                        </span>
+                      )}
                       <button
                         type="button"
                         onClick={() => {

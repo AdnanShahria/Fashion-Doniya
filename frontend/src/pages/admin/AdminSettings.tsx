@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { settingsService } from '../../services/settingsService';
 import { StorageService } from '../../services/storageService';
@@ -20,7 +20,17 @@ import { AdminSystemDiagnostics } from '../../components/admin/AdminSystemDiagno
 
 export const AdminSettings: React.FC = () => {
   const { settings, refreshData, showToast, navigateTo } = useStore();
-  const [formData, setFormData] = useState<StoreSettings>({ ...settings });
+  const hasEditedRef = useRef(false);
+  const [formData, setFormDataRaw] = useState<StoreSettings>({ ...settings });
+  const setFormData: React.Dispatch<React.SetStateAction<StoreSettings>> = (val) => {
+    hasEditedRef.current = true;
+    setFormDataRaw(val);
+  };
+  useEffect(() => {
+    if (!hasEditedRef.current) {
+      setFormDataRaw({ ...settings });
+    }
+  }, [settings]);
   const [activeSubTab, setActiveSubTab] = useState<'general' | 'diagnostics'>('general');
 
   // Coupon state
@@ -31,6 +41,7 @@ export const AdminSettings: React.FC = () => {
 
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
+    hasEditedRef.current = false;
     settingsService.updateSettings(formData);
     refreshData();
     showToast('ওয়েবসাইটের সেটিংস সফলভাবে আপডেট হয়েছে!', 'success');

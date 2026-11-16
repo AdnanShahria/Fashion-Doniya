@@ -5,6 +5,7 @@ import {
   addresses,
   walletTransactions,
   returns,
+  orders,
   loyaltyTiers,
   loyaltyRewards,
   userLoyalty,
@@ -16,7 +17,7 @@ import {
   newsletterLeads,
   popupSettings,
 } from '../../../backend/server/db/schemas/index';
-import { safeJsonParse } from '../utils/helpers';
+import { normalizePhone, safeJsonParse } from '../utils/helpers';
 import { getStoreAndPaymentSettings } from '../utils/mappers';
 
 export const addressesRouter = new Hono<AppEnv>();
@@ -95,17 +96,52 @@ returnsRouter.post('/', async (c) => {
   const user = c.get('user');
   if (!user) return c.json({ success: false, message: 'Unauthorized' }, 401);
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-  const now = new Date().toISOString();
+  const orderId = String(body.orderId || '').trim();
+  const orderNumber = String(body.orderNumber || '').trim();
+  const reason = String(body.reason || '').trim();
+
+  if (!reason) {
+    return c.json({ success: false, message: 'রিটার্নের কারণ উল্লেখ করা আবশ্যক।' }, 400);
+  }
+  if (!orderId && !orderNumber) {
+    return c.json({ success: false, message: 'অর্ডার আইডি বা অর্ডার নম্বর আবশ্যক।' }, 400);
+  }
+
   const db = c.get('db');
+  let orderRow = orderId
+    ? await db.select().from(orders).where(eq(orders.id, orderId)).get()
+    : undefined;
+  if (!orderRow && orderNumber) {
+    orderRow = await db.select().from(orders).where(eq(orders.orderNumber, orderNumber)).get();
+  }
+  if (!orderRow) {
+    return c.json({ success: false, message: 'অর্ডার খুঁজে পাওয়া যায়নি।' }, 404);
+  }
+
+  const orderCustomer = safeJsonParse<{ phone?: string }>(orderRow.customer, {});
+  const userNormPhone = normalizePhone(user.phone || '');
+  const orderNormPhone = normalizePhone(orderCustomer.phone || '');
+  const isOwner =
+    (orderRow.userId && orderRow.userId === user.id) ||
+    (Boolean(userNormPhone) && Boolean(orderNormPhone) && userNormPhone === orderNormPhone);
+  if (!isOwner && !c.get('isAdmin')) {
+    return c.json({ success: false, message: 'এই অর্ডারের রিটার্ন অনুরোধ করার অনুমতি নেই।' }, 403);
+  }
+
+  const rawRefund = Number(body.refundAmount ?? orderRow.totalAmount);
+  const safeRefund = Number.isFinite(rawRefund) ? rawRefund : orderRow.totalAmount;
+  const refundAmount = Math.max(0, Math.min(safeRefund, orderRow.totalAmount));
+
+  const now = new Date().toISOString();
   const id = `ret-${Date.now()}`;
   await db.insert(returns).values({
     id,
-    orderId: String(body.orderId || ''),
-    orderNumber: String(body.orderNumber || ''),
+    orderId: orderRow.id,
+    orderNumber: orderRow.orderNumber,
     userId: user.id,
-    reason: String(body.reason || ''),
+    reason,
     status: 'requested',
-    refundAmount: Number(body.refundAmount || 0),
+    refundAmount,
     createdAt: now,
     updatedAt: now,
   });
@@ -204,8 +240,26 @@ couponsRouter.post('/validate', async (c) => {
     return c.json({ isValid: false, discountAmount: 0, message: 'অনুগ্রহ করে কুপন কোড লিখুন।' });
   }
   const db = c.get('db');
+  const { settings } = await getStoreAndPaymentSettings(db);
+  const settingsMatch = (settings.coupons || []).find(
+    (cp) => cp.code?.trim().toUpperCase() === code
+  );
+  if (settingsMatch && settingsMatch.isActive === false) {
+    return c.json({ isValid: false, discountAmount: 0, message: 'কুপন কোডটি সঠিক নয় বা মেয়াদ শেষ হয়েছে।' });
+  }
+
   const found = await db.select().from(coupons).where(eq(coupons.code, code)).get();
   if (found && found.isActive) {
+    const expMs = found.expiresAt ? Date.parse(found.expiresAt) : NaN;
+    const notExpired = !found.expiresAt || (!Number.isNaN(expMs) && expMs > Date.now());
+    const underLimit = !found.usageLimit || Number(found.usedCount || 0) < found.usageLimit;
+    if (!notExpired || !underLimit) {
+      return c.json({
+        isValid: false,
+        discountAmount: 0,
+        message: 'কুপনটির মেয়াদ শেষ হয়েছে বা ব্যবহারের সীমা পূর্ণ হয়েছে।',
+      });
+    }
     if (found.minOrderAmount && subtotal < found.minOrderAmount) {
       return c.json({
         isValid: false,
@@ -213,20 +267,36 @@ couponsRouter.post('/validate', async (c) => {
         message: `এই কুপন ব্যবহারের জন্য ন্যূনতম ৳${found.minOrderAmount} অর্ডার করতে হবে।`,
       });
     }
-    const discountAmount =
+    let discountAmount =
       found.discountType === 'percentage'
         ? Math.round((subtotal * found.discountValue) / 100)
         : Math.min(subtotal, found.discountValue);
+    if (
+      found.discountType === 'percentage' &&
+      found.maxDiscountAmount &&
+      found.maxDiscountAmount > 0
+    ) {
+      discountAmount = Math.min(discountAmount, found.maxDiscountAmount);
+    }
+    discountAmount = Math.min(subtotal, Math.max(0, discountAmount));
     return c.json({ isValid: true, discountAmount, coupon: found, message: 'কুপন সফলভাবে প্রয়োগ হয়েছে!' });
   }
 
   // Fallback to systemSettings store_settings.coupons managed by AdminPromotions / AdminSettings
-  const { settings } = await getStoreAndPaymentSettings(db);
-  const cfgCoupon = (settings.coupons || []).find(
-    (cp) => cp.code?.trim().toUpperCase() === code && cp.isActive
-  );
+  const cfgCoupon = settingsMatch && settingsMatch.isActive ? settingsMatch : undefined;
   if (!cfgCoupon) {
     return c.json({ isValid: false, discountAmount: 0, message: 'কুপন কোডটি সঠিক নয় বা মেয়াদ শেষ হয়েছে।' });
+  }
+  const cfgExpMs = cfgCoupon.expiresAt ? Date.parse(cfgCoupon.expiresAt) : NaN;
+  const cfgNotExpired = !cfgCoupon.expiresAt || (!Number.isNaN(cfgExpMs) && cfgExpMs > Date.now());
+  const cfgUnderLimit =
+    !cfgCoupon.usageLimit || Number(cfgCoupon.usedCount || 0) < cfgCoupon.usageLimit;
+  if (!cfgNotExpired || !cfgUnderLimit) {
+    return c.json({
+      isValid: false,
+      discountAmount: 0,
+      message: 'কুপনটির মেয়াদ শেষ হয়েছে বা ব্যবহারের সীমা পূর্ণ হয়েছে।',
+    });
   }
   if (cfgCoupon.minOrderAmount && subtotal < cfgCoupon.minOrderAmount) {
     return c.json({
@@ -235,10 +305,18 @@ couponsRouter.post('/validate', async (c) => {
       message: `এই কুপন ব্যবহারের জন্য ন্যূনতম ৳${cfgCoupon.minOrderAmount} অর্ডার করতে হবে।`,
     });
   }
-  const discountAmount =
+  let discountAmount =
     cfgCoupon.discountType === 'percentage'
       ? Math.round((subtotal * cfgCoupon.discountValue) / 100)
       : Math.min(subtotal, cfgCoupon.discountValue);
+  if (
+    cfgCoupon.discountType === 'percentage' &&
+    cfgCoupon.maxDiscountAmount &&
+    cfgCoupon.maxDiscountAmount > 0
+  ) {
+    discountAmount = Math.min(discountAmount, cfgCoupon.maxDiscountAmount);
+  }
+  discountAmount = Math.min(subtotal, Math.max(0, discountAmount));
   return c.json({ isValid: true, discountAmount, coupon: cfgCoupon, message: 'কুপন সফলভাবে প্রয়োগ হয়েছে!' });
 });
 
@@ -247,16 +325,19 @@ cartRouter.get('/', async (c) => {
   const user = c.get('user');
   const sessionId = c.req.header('x-session-id') || '';
   const db = c.get('db');
-  const key = user?.id || sessionId;
+  const key = user ? `user:${user.id}` : sessionId ? `sess:${sessionId}` : '';
   if (!key) return c.json({ success: true, items: [] });
-  const row = await db.select().from(userCarts).where(eq(userCarts.id, key)).get();
+  let row = await db.select().from(userCarts).where(eq(userCarts.id, key)).get();
+  if (!row && user) {
+    row = await db.select().from(userCarts).where(eq(userCarts.id, user.id)).get();
+  }
   return c.json({ success: true, items: safeJsonParse(row?.items, []) });
 });
 
 cartRouter.put('/', async (c) => {
   const user = c.get('user');
   const sessionId = c.req.header('x-session-id') || '';
-  const key = user?.id || sessionId;
+  const key = user ? `user:${user.id}` : sessionId ? `sess:${sessionId}` : '';
   if (!key) return c.json({ success: false, message: 'Session or user required' }, 400);
   const body = (await c.req.json().catch(() => ({}))) as { items?: unknown[] };
   const db = c.get('db');

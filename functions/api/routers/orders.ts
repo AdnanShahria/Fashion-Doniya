@@ -1,7 +1,17 @@
 import { Hono, type Context } from 'hono';
-import { eq, or } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { AppEnv } from '../types';
-import { orders, trackings, courierInfo, orderItems, products, coupons } from '../../../backend/server/db/schemas/index';
+import type { AppDatabase } from '../utils/db-factory';
+import {
+  orders,
+  trackings,
+  courierInfo,
+  orderItems,
+  products,
+  coupons,
+  users,
+  productSales,
+} from '../../../backend/server/db/schemas/index';
 import type { AddonFabricOption, Order, OrderStatus, PaymentStatus } from '../../../frontend/src/types/index';
 import { INITIAL_ADDON_FABRIC_COLLECTIONS } from '../../../frontend/src/data/seedData';
 import { getAllOrdersHydrated, hydrateOrderRow, getStoreAndPaymentSettings } from '../utils/mappers';
@@ -14,6 +24,146 @@ import { sendTransactionalSms } from '../utils/sms';
 
 export const ordersRouter = new Hono<AppEnv>();
 export const adminOrdersRouter = new Hono<AppEnv>();
+
+const INACTIVE_ORDER_STATUSES = new Set<string>(['Cancelled', 'Returned']);
+
+export async function reconcileOrderInventory(
+  db: AppDatabase,
+  orderRow: typeof orders.$inferSelect,
+  prevStatus: string,
+  nextStatus: string
+): Promise<void> {
+  const wasActive = !INACTIVE_ORDER_STATUSES.has(prevStatus);
+  const willBeActive = !INACTIVE_ORDER_STATUSES.has(nextStatus);
+  if (wasActive === willBeActive) return;
+
+  const items = safeJsonParse<Order['items']>(orderRow.items, []);
+  const boltYardsByProduct = new Map<string, number>();
+
+  for (const item of items) {
+    if (!item?.productId) continue;
+    let addonTotalYards = 0;
+    let setSameProductAddonYards = 0;
+
+    if (Array.isArray(item.selectedAddons)) {
+      for (const addon of item.selectedAddons) {
+        const count = Number(addon?.count || 0);
+        const yardsPerUnit = Number(addon?.yardsPerUnit || 0);
+        if (count > 0 && yardsPerUnit > 0) {
+          const addonYards = Number((count * yardsPerUnit).toFixed(2));
+          addonTotalYards = Number((addonTotalYards + addonYards).toFixed(2));
+          if (
+            addon.addonId === 'orna' ||
+            !addon.fabricId ||
+            String(addon.fabricId).startsWith('set-')
+          ) {
+            setSameProductAddonYards = Number((setSameProductAddonYards + addonYards).toFixed(2));
+          }
+        }
+      }
+    }
+
+    const itemYards = Number(item.yards || 0);
+    const mainYards =
+      addonTotalYards > 0 && itemYards > addonTotalYards + 0.01
+        ? Number((itemYards - addonTotalYards).toFixed(2))
+        : itemYards;
+    const totalBoltYards = Number((mainYards + setSameProductAddonYards).toFixed(2));
+    if (totalBoltYards <= 0) continue;
+
+    boltYardsByProduct.set(
+      item.productId,
+      Number(((boltYardsByProduct.get(item.productId) || 0) + totalBoltYards).toFixed(2))
+    );
+  }
+
+  const now = new Date().toISOString();
+  const normalizedCouponCode = orderRow.couponCode
+    ? String(orderRow.couponCode).trim().toUpperCase()
+    : null;
+
+  if (wasActive && !willBeActive) {
+    for (const [prodId, yards] of boltYardsByProduct.entries()) {
+      await db
+        .update(products)
+        .set({
+          stockYards: sql`ROUND(${products.stockYards} + ${yards}, 2)`,
+          updatedAt: now,
+        })
+        .where(eq(products.id, prodId));
+    }
+    if (normalizedCouponCode) {
+      await db
+        .update(coupons)
+        .set({
+          usedCount: sql`MAX(0, ${coupons.usedCount} - 1)`,
+        })
+        .where(eq(coupons.code, normalizedCouponCode));
+    }
+  } else if (!wasActive && willBeActive) {
+    for (const [prodId, yards] of boltYardsByProduct.entries()) {
+      await db
+        .update(products)
+        .set({
+          stockYards: sql`MAX(0, ROUND(${products.stockYards} - ${yards}, 2))`,
+          updatedAt: now,
+        })
+        .where(eq(products.id, prodId));
+    }
+    if (normalizedCouponCode) {
+      await db
+        .update(coupons)
+        .set({
+          usedCount: sql`${coupons.usedCount} + 1`,
+        })
+        .where(eq(coupons.code, normalizedCouponCode));
+    }
+  }
+}
+
+export async function recalculateCustomerOrderStats(
+  db: AppDatabase,
+  userId?: string | null,
+  phone?: string | null
+): Promise<void> {
+  const normPhone = normalizePhone(phone || '');
+  let targetUser: typeof users.$inferSelect | undefined;
+
+  if (userId) {
+    targetUser = await db.select().from(users).where(eq(users.id, userId)).get();
+  }
+  if (!targetUser && normPhone) {
+    const allUsers = await db.select().from(users);
+    targetUser = allUsers.find((u) => normalizePhone(u.phone) === normPhone);
+  }
+  if (!targetUser) return;
+
+  const targetNormPhone = normPhone || normalizePhone(targetUser.phone || '');
+  const allOrders = await db.select().from(orders);
+  const validOrders = allOrders.filter((o) => {
+    if (INACTIVE_ORDER_STATUSES.has(o.orderStatus)) return false;
+    if (o.userId && o.userId === targetUser.id) return true;
+    if (targetNormPhone) {
+      const custPhone = normalizePhone(
+        safeJsonParse<{ phone?: string }>(o.customer, { phone: '' }).phone || ''
+      );
+      if (custPhone && custPhone === targetNormPhone) return true;
+    }
+    return false;
+  });
+
+  const totalOrders = validOrders.length;
+  const totalSpent = validOrders.reduce((s, o) => s + Number(o.totalAmount || 0), 0);
+
+  await db
+    .update(users)
+    .set({
+      totalOrders,
+      totalSpent,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(users.id, targetUser.id));
+}
 
 const VALID_STATUSES: OrderStatus[] = [
   'Pending',
@@ -202,9 +352,15 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
 
   const db = c.get('db');
   const now = new Date().toISOString();
-  const id = orderData.id || `ord-${Date.now()}`;
+  const isAdmin = c.get('isAdmin');
+  const id =
+    isAdmin && orderData.id
+      ? String(orderData.id)
+      : `ord-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const orderNumber =
-    orderData.orderNumber || `FD-${Math.floor(100000 + Math.random() * 900000)}`;
+    isAdmin && orderData.orderNumber
+      ? String(orderData.orderNumber)
+      : `FD-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
   const normalizedCustomer = {
     ...orderData.customer,
     phone: normalizedPhone,
@@ -347,29 +503,38 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
   let appliedDbCoupon: typeof coupons.$inferSelect | null = null;
   const couponCode = orderData.couponCode ? String(orderData.couponCode).trim().toUpperCase() : null;
   if (couponCode) {
-    const foundCoupon = await db.select().from(coupons).where(eq(coupons.code, couponCode)).get();
-    if (foundCoupon && foundCoupon.isActive) {
-      const notExpired = !foundCoupon.expiresAt || Date.parse(foundCoupon.expiresAt) > Date.now();
-      const underLimit = !foundCoupon.usageLimit || Number(foundCoupon.usedCount || 0) < foundCoupon.usageLimit;
-      if (notExpired && underLimit && (!foundCoupon.minOrderAmount || verifiedSubtotal >= foundCoupon.minOrderAmount)) {
-        const rawDiscount =
-          foundCoupon.discountType === 'percentage'
-            ? Math.round((verifiedSubtotal * foundCoupon.discountValue) / 100)
-            : Math.min(verifiedSubtotal, foundCoupon.discountValue);
-        verifiedDiscount = foundCoupon.maxDiscountAmount
-          ? Math.min(rawDiscount, foundCoupon.maxDiscountAmount)
-          : rawDiscount;
-        appliedDbCoupon = foundCoupon;
-      }
-    } else {
-      const cfgCoupon = (settings.coupons || []).find(
-        (cp) => cp.code?.trim().toUpperCase() === couponCode && cp.isActive
-      );
-      if (cfgCoupon && (!cfgCoupon.minOrderAmount || verifiedSubtotal >= cfgCoupon.minOrderAmount)) {
-        verifiedDiscount =
-          cfgCoupon.discountType === 'percentage'
-            ? Math.round((verifiedSubtotal * cfgCoupon.discountValue) / 100)
-            : Math.min(verifiedSubtotal, cfgCoupon.discountValue);
+    const cfgCouponEntry = (settings.coupons || []).find(
+      (cp) => cp.code?.trim().toUpperCase() === couponCode
+    );
+    const isDeactivatedInSettings = cfgCouponEntry && cfgCouponEntry.isActive === false;
+
+    if (!isDeactivatedInSettings) {
+      const foundCoupon = await db.select().from(coupons).where(eq(coupons.code, couponCode)).get();
+      if (foundCoupon && foundCoupon.isActive) {
+        const notExpired = !foundCoupon.expiresAt || Date.parse(foundCoupon.expiresAt) > Date.now();
+        const underLimit = !foundCoupon.usageLimit || Number(foundCoupon.usedCount || 0) < foundCoupon.usageLimit;
+        if (notExpired && underLimit && (!foundCoupon.minOrderAmount || verifiedSubtotal >= foundCoupon.minOrderAmount)) {
+          const rawDiscount =
+            foundCoupon.discountType === 'percentage'
+              ? Math.round((verifiedSubtotal * foundCoupon.discountValue) / 100)
+              : Math.min(verifiedSubtotal, foundCoupon.discountValue);
+          verifiedDiscount = foundCoupon.maxDiscountAmount
+            ? Math.min(rawDiscount, foundCoupon.maxDiscountAmount)
+            : rawDiscount;
+          appliedDbCoupon = foundCoupon;
+        }
+      } else if (cfgCouponEntry && cfgCouponEntry.isActive) {
+        const notExpired = !cfgCouponEntry.expiresAt || Date.parse(cfgCouponEntry.expiresAt) > Date.now();
+        const underLimit = !cfgCouponEntry.usageLimit || Number(cfgCouponEntry.usedCount || 0) < cfgCouponEntry.usageLimit;
+        if (notExpired && underLimit && (!cfgCouponEntry.minOrderAmount || verifiedSubtotal >= cfgCouponEntry.minOrderAmount)) {
+          const rawDiscount =
+            cfgCouponEntry.discountType === 'percentage'
+              ? Math.round((verifiedSubtotal * cfgCouponEntry.discountValue) / 100)
+              : Math.min(verifiedSubtotal, cfgCouponEntry.discountValue);
+          verifiedDiscount = cfgCouponEntry.maxDiscountAmount
+            ? Math.min(rawDiscount, cfgCouponEntry.maxDiscountAmount)
+            : rawDiscount;
+        }
       }
     }
   }
@@ -406,7 +571,7 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
   if (appliedDbCoupon && verifiedDiscount > 0) {
     await db
       .update(coupons)
-      .set({ usedCount: Number(appliedDbCoupon.usedCount || 0) + 1 })
+      .set({ usedCount: sql`${coupons.usedCount} + 1` })
       .where(eq(coupons.id, appliedDbCoupon.id));
   }
 
@@ -439,17 +604,28 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
         customization: customPayload ? JSON.stringify(customPayload) : null,
       })
       .onConflictDoNothing();
+
+    await db
+      .insert(productSales)
+      .values({
+        id: `ps-${id}-${idx}`,
+        productId: item.productId,
+        orderId: id,
+        yardsSold: yards,
+        revenue: item.finalProductPrice || 0,
+        soldAt: now,
+      })
+      .onConflictDoNothing();
   }
 
   for (const [prodId, usedYards] of stockDeductions.entries()) {
-    const prod = prodMap.get(prodId);
-    if (prod) {
-      const nextStock = Math.max(0, Number((prod.stockYards - usedYards).toFixed(2)));
-      await db
-        .update(products)
-        .set({ stockYards: nextStock, updatedAt: now })
-        .where(eq(products.id, prod.id));
-    }
+    await db
+      .update(products)
+      .set({
+        stockYards: sql`MAX(0, ROUND(${products.stockYards} - ${usedYards}, 2))`,
+        updatedAt: now,
+      })
+      .where(eq(products.id, prodId));
   }
 
   await db
@@ -465,6 +641,8 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
       updatedBy: 'System',
     })
     .onConflictDoNothing();
+
+  await recalculateCustomerOrderStats(db, authUser?.id || null, normalizedPhone);
 
   await appendAdminLog(
     db,
@@ -535,7 +713,7 @@ ordersRouter.post('/', checkoutRateLimiter, async (c) => {
   return c.json({ success: true, order: hydrated }, 201);
 });
 
-ordersRouter.post('/sync-client', async (c) => {
+ordersRouter.post('/sync-client', pollingRateLimiter, async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { orders?: Order[] };
   const db = c.get('db');
   const isAdmin = c.get('isAdmin');
@@ -543,7 +721,7 @@ ordersRouter.post('/sync-client', async (c) => {
   const clientPairs: Array<{ orderNumber: string; phone: string }> = [];
 
   if (Array.isArray(body?.orders)) {
-    for (const incoming of body.orders) {
+    for (const incoming of body.orders.slice(0, 25)) {
       if (!incoming?.orderNumber || !incoming?.customer?.phone) continue;
       const cleanPhone = normalizePhone(incoming.customer.phone);
       clientPairs.push({
@@ -687,6 +865,12 @@ adminOrdersRouter.patch('/:id/status', async (c) => {
     })
     .where(eq(orders.id, row.id));
 
+  if (body.status !== row.orderStatus) {
+    await reconcileOrderInventory(db, row, row.orderStatus, body.status);
+  }
+  const customerPhone = safeJsonParse<{ phone?: string }>(row.customer, {}).phone || '';
+  await recalculateCustomerOrderStats(db, row.userId, customerPhone);
+
   const entry = {
     id: `trk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     orderId: row.id,
@@ -704,6 +888,7 @@ adminOrdersRouter.patch('/:id/status', async (c) => {
     'order',
     `${row.orderStatus} → ${body.status}`
   );
+  await invalidateHomeCache(c.env);
   clearBulkMicroCache();
 
   const updated = await db.select().from(orders).where(eq(orders.id, row.id)).get();
@@ -747,6 +932,13 @@ adminOrdersRouter.post('/:id/tracking', async (c) => {
     .update(orders)
     .set({ orderStatus: status, paymentStatus: nextPaymentStatus, updatedAt: now })
     .where(eq(orders.id, row.id));
+
+  if (status !== row.orderStatus) {
+    await reconcileOrderInventory(db, row, row.orderStatus, status);
+  }
+  const customerPhone = safeJsonParse<{ phone?: string }>(row.customer, {}).phone || '';
+  await recalculateCustomerOrderStats(db, row.userId, customerPhone);
+  await invalidateHomeCache(c.env);
   clearBulkMicroCache();
 
   const updated = await db.select().from(orders).where(eq(orders.id, row.id)).get();
@@ -891,12 +1083,15 @@ adminOrdersRouter.delete('/:id', async (c) => {
     return c.json({ success: false, message: 'অর্ডারটি খুঁজে পাওয়া যায়নি।' }, 404);
   }
 
+  await reconcileOrderInventory(db, row, row.orderStatus, 'Cancelled');
+
   await db.delete(orderItems).where(eq(orderItems.orderId, row.id));
   await db.delete(trackings).where(eq(trackings.orderId, row.id));
   await db.delete(courierInfo).where(eq(courierInfo.orderId, row.id));
   await db.delete(orders).where(eq(orders.id, row.id));
 
   const cust = safeJsonParse<{ fullName?: string; phone?: string }>(row.customer, {});
+  await recalculateCustomerOrderStats(db, row.userId, cust.phone || '');
   await appendAdminLog(
     db,
     `অর্ডার মুছে ফেলা হয়েছে: ${row.orderNumber}`,
@@ -904,6 +1099,7 @@ adminOrdersRouter.delete('/:id', async (c) => {
     `গ্রাহক: ${cust.fullName || 'Unknown'} (${cust.phone || ''}) · মোট: ৳${row.totalAmount}`
   );
 
+  await invalidateHomeCache(c.env);
   clearBulkMicroCache();
   return c.json({ success: true, message: `অর্ডার ${row.orderNumber} সফলভাবে মুছে ফেলা হয়েছে।` });
 });

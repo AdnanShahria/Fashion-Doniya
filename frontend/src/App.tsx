@@ -112,14 +112,16 @@ const AppContent: React.FC = () => {
   const {
     currentPage,
     selectedWidthFilter,
+    selectedCategory,
     selectedProductId,
     products,
     settings,
     navigateTo,
   } = useStore();
-  const selectedProduct = products.find((p) => p.id === selectedProductId) || null;
+  const selectedProduct =
+    products.find((p) => p.id === selectedProductId || p.slug === selectedProductId) || null;
 
-  // Dynamic SEO & Favicon synchronization
+  // Dynamic SEO, Robots, Canonical/Hreflang, OpenGraph/Twitter & JSON-LD synchronization
   React.useEffect(() => {
     const seo = settings.seoConfig;
     const pageSeo = seo?.pages?.[currentPage];
@@ -153,15 +155,109 @@ const AppContent: React.FC = () => {
       el.setAttribute(attr, val);
     };
 
+    const setLink = (selector: string, attrs: Record<string, string>) => {
+      let el = document.querySelector(selector) as HTMLLinkElement | null;
+      if (!el) {
+        el = document.createElement('link');
+        document.head.appendChild(el);
+      }
+      for (const [key, val] of Object.entries(attrs)) {
+        el.setAttribute(key, val);
+      }
+    };
+
+    const pathname = location.pathname;
+    const origin = window.location.origin;
+    const canonicalUrl = `${origin}${pathname === '/' ? '' : pathname}`;
+
+    const privatePrefixes = [
+      '/admin',
+      '/sysadm',
+      '/account',
+      '/cart',
+      '/checkout',
+      '/wishlist',
+      '/order-confirmation',
+      '/login',
+      '/register',
+      '/forgot-password',
+      '/reset-password',
+    ];
+    const isPrivatePath = privatePrefixes.some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+    );
+
+    setMeta(
+      'meta[name="robots"]',
+      'content',
+      isPrivatePath
+        ? 'noindex, nofollow'
+        : 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1'
+    );
+
+    setLink('link[rel="canonical"]', { rel: 'canonical', href: canonicalUrl });
+    setLink('link[rel="alternate"][hreflang="bn-BD"]', {
+      rel: 'alternate',
+      hreflang: 'bn-BD',
+      href: canonicalUrl,
+    });
+    setLink('link[rel="alternate"][hreflang="en"]', {
+      rel: 'alternate',
+      hreflang: 'en',
+      href: canonicalUrl,
+    });
+    setLink('link[rel="alternate"][hreflang="x-default"]', {
+      rel: 'alternate',
+      hreflang: 'x-default',
+      href: canonicalUrl,
+    });
+
+    const toAbsoluteImageUrl = (raw?: string): string => {
+      if (!raw || raw.startsWith('data:')) return '';
+      if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+      return `${origin}${raw.startsWith('/') ? raw : `/${raw}`}`;
+    };
+
+    const rawOgImage =
+      (currentPage === 'product-details' && selectedProduct
+        ? selectedProduct.images?.find((img) => img && !img.startsWith('data:'))
+        : undefined) ||
+      pageSeo?.ogImage ||
+      seo?.ogImageUrl ||
+      seo?.ogImage ||
+      '/assets/fabric-banner-3-5.png';
+
+    const resolvedOgImage = toAbsoluteImageUrl(rawOgImage);
+    const resolvedImageAlt =
+      currentPage === 'product-details' && selectedProduct
+        ? selectedProduct.imageAlt || selectedProduct.name || title
+        : title || settings.storeName;
+
     if (description) {
       setMeta('meta[name="description"]', 'content', description);
       setMeta('meta[property="og:description"]', 'content', description);
+      setMeta('meta[name="twitter:description"]', 'content', description);
     }
     if (title) {
       setMeta('meta[property="og:title"]', 'content', title);
+      setMeta('meta[name="twitter:title"]', 'content', title);
     }
     if (keywords) {
       setMeta('meta[name="keywords"]', 'content', keywords);
+    }
+    setMeta('meta[property="og:url"]', 'content', canonicalUrl);
+    setMeta(
+      'meta[property="og:type"]',
+      'content',
+      currentPage === 'product-details' && selectedProduct ? 'product' : 'website'
+    );
+    if (resolvedOgImage) {
+      setMeta('meta[property="og:image"]', 'content', resolvedOgImage);
+      setMeta('meta[name="twitter:image"]', 'content', resolvedOgImage);
+    }
+    if (resolvedImageAlt) {
+      setMeta('meta[property="og:image:alt"]', 'content', resolvedImageAlt);
+      setMeta('meta[name="twitter:image:alt"]', 'content', resolvedImageAlt);
     }
 
     if (settings.faviconUrl) {
@@ -173,7 +269,150 @@ const AppContent: React.FC = () => {
       }
       link.href = settings.faviconUrl;
     }
-  }, [currentPage, selectedProduct, settings]);
+
+    // Dynamic Route JSON-LD for product-details & category-gallery
+    const existingJsonLd = document.getElementById('dynamic-route-jsonld');
+    if (currentPage === 'product-details' && selectedProduct) {
+      const productImages = (selectedProduct.images || [])
+        .map((img) => toAbsoluteImageUrl(img))
+        .filter(Boolean);
+      const effectivePrice = selectedProduct.discountPrice || selectedProduct.pricePerYard;
+      const widthLabel = `${selectedProduct.fabricWidth} বহর`;
+      const jsonLdPayload = {
+        '@context': 'https://schema.org',
+        '@graph': [
+          {
+            '@type': 'Product',
+            name: selectedProduct.name,
+            description:
+              selectedProduct.seoDescription || selectedProduct.description || description,
+            sku: selectedProduct.sku,
+            ...(productImages.length > 0
+              ? { image: productImages }
+              : resolvedOgImage
+                ? { image: [resolvedOgImage] }
+                : {}),
+            brand: {
+              '@type': 'Brand',
+              name: settings.storeName,
+            },
+            category: selectedProduct.category,
+            offers: {
+              '@type': 'Offer',
+              url: canonicalUrl,
+              priceCurrency: 'BDT',
+              price: String(effectivePrice),
+              availability:
+                selectedProduct.stockYards > 0
+                  ? 'https://schema.org/InStock'
+                  : 'https://schema.org/OutOfStock',
+              itemCondition: 'https://schema.org/NewCondition',
+            },
+            ...(selectedProduct.rating && selectedProduct.reviewCount
+              ? {
+                  aggregateRating: {
+                    '@type': 'AggregateRating',
+                    ratingValue: String(selectedProduct.rating),
+                    reviewCount: String(selectedProduct.reviewCount),
+                  },
+                }
+              : {}),
+          },
+          {
+            '@type': 'BreadcrumbList',
+            itemListElement: [
+              {
+                '@type': 'ListItem',
+                position: 1,
+                name: settings.storeName,
+                item: `${origin}/`,
+              },
+              {
+                '@type': 'ListItem',
+                position: 2,
+                name: widthLabel,
+                item: `${origin}/fabric/${selectedProduct.fabricWidth}-bahar`,
+              },
+              {
+                '@type': 'ListItem',
+                position: 3,
+                name: selectedProduct.name,
+                item: canonicalUrl,
+              },
+            ],
+          },
+        ],
+      };
+
+      const scriptEl =
+        existingJsonLd ||
+        (() => {
+          const s = document.createElement('script');
+          s.id = 'dynamic-route-jsonld';
+          s.type = 'application/ld+json';
+          document.head.appendChild(s);
+          return s;
+        })();
+      scriptEl.textContent = JSON.stringify(jsonLdPayload);
+    } else if (currentPage === 'category-gallery') {
+      const resolvedWidth = selectedWidthFilter === 'all' ? '3.5' : selectedWidthFilter;
+      const categoryLabel = selectedCategory || 'কালেকশন';
+      const jsonLdPayload = {
+        '@context': 'https://schema.org',
+        '@graph': [
+          {
+            '@type': 'CollectionPage',
+            name: `${categoryLabel} (${resolvedWidth} বহর) | ${settings.storeName}`,
+            description: description || `${resolvedWidth} বহর ${categoryLabel} গজ কাপড় সংগ্রহ`,
+            url: canonicalUrl,
+          },
+          {
+            '@type': 'BreadcrumbList',
+            itemListElement: [
+              {
+                '@type': 'ListItem',
+                position: 1,
+                name: settings.storeName,
+                item: `${origin}/`,
+              },
+              {
+                '@type': 'ListItem',
+                position: 2,
+                name: `${resolvedWidth} বহর`,
+                item: `${origin}/fabric/${resolvedWidth}-bahar`,
+              },
+              {
+                '@type': 'ListItem',
+                position: 3,
+                name: categoryLabel,
+                item: canonicalUrl,
+              },
+            ],
+          },
+        ],
+      };
+
+      const scriptEl =
+        existingJsonLd ||
+        (() => {
+          const s = document.createElement('script');
+          s.id = 'dynamic-route-jsonld';
+          s.type = 'application/ld+json';
+          document.head.appendChild(s);
+          return s;
+        })();
+      scriptEl.textContent = JSON.stringify(jsonLdPayload);
+    } else if (existingJsonLd) {
+      existingJsonLd.remove();
+    }
+  }, [
+    currentPage,
+    selectedProduct,
+    selectedCategory,
+    selectedWidthFilter,
+    settings,
+    location.pathname,
+  ]);
 
   // Surface 1: SysAdm Console (Disconnected as requested; preserved without deletion)
   /*
@@ -285,6 +524,12 @@ const AppContent: React.FC = () => {
               }
             />
             <Route path="/shop-3-5" element={<FabricWidthCategoryPage width="3.5" />} />
+            <Route path="/login" element={<AccountPage />} />
+            <Route path="/register" element={<AccountPage />} />
+            <Route path="/forgot-password" element={<AccountPage />} />
+            <Route path="/account/forgot-password" element={<AccountPage />} />
+            <Route path="/reset-password" element={<AccountPage />} />
+            <Route path="/account/reset-password" element={<AccountPage />} />
             <Route path="*" element={<HomePage />} />
           </Routes>
         </Suspense>

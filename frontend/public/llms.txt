@@ -11,6 +11,15 @@
 - [Custom Design Studio](https://fashiondoniyabd.com/custom-design): Custom measurements and AI fabric-to-outfit preview
 - [Order Tracking](https://fashiondoniyabd.com/order-tracking): Real-time phone-verified order and courier tracking
 
+## Active Categories
+- [কামিজ](https://fashiondoniyabd.com/category/kamiz): নরম ও আরামদায়ক কামিজের আনস্টিচড থান ও গজ কাপড়
+- [শর্ট কামিজ](https://fashiondoniyabd.com/category/short-kamiz): আধুনিক শর্ট কামিজ ও টপস বানানোর ফেব্রিক
+- [লং কটি](https://fashiondoniyabd.com/category/long-koti): রয়েল ও গর্জিয়াস লং কটি এবং শ্রাগের কাপড়
+- [গাউন / লেহেঙ্গা](https://fashiondoniyabd.com/category/gown-lehenga): ফুল ঘেরের পার্টি গাউন ও ব্রাইডাল লেহেঙ্গার বড় বহর থান
+- [শাড়ি](https://fashiondoniyabd.com/category/saree): ট্রেডিশনাল জামদানি, চান্দেরি সিল্ক ও পার্টি শাড়ির কাপড়
+- [গাউন](https://fashiondoniyabd.com/category/gown): স্টাইলিশ ক্যাজুয়াল ও পার্টি গাউন ফেব্রিক
+- [কাস্টম ডিজাইন](https://fashiondoniyabd.com/category/custom-design): পছন্দমতো যেকোনো পোশাকের জন্য প্রিমিয়াম গজ কাপড়
+
 ## Machine-Readable Feeds
 - [XML Sitemap](https://fashiondoniyabd.com/sitemap.xml)
 - [Google Merchant Feed](https://fashiondoniyabd.com/feed.xml)

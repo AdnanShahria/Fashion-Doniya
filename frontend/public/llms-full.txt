@@ -9,3 +9,25 @@ Fashion Doniya BD is an online boutique yard-fabric store in Bangladesh selling 
 - **Yardage Calculator**: Calculates exact fabric yardage required based on garment type, fabric width, and optional addons (inner, pant, palazzo, orna, blouse).
 - **Custom Tailoring & Measurements**: Customers can submit chest, waist, hip, length, sleeve, and shoulder measurements or request custom garment previews.
 - **Payments & Delivery**: Supports bKash, Nagad, and Cash on Delivery (COD) with Steadfast, Pathao, RedX, Paperfly, and Sundarban courier tracking across Bangladesh.
+
+## Active Categories
+- [কামিজ](https://fashiondoniyabd.com/category/kamiz)
+- [শর্ট কামিজ](https://fashiondoniyabd.com/category/short-kamiz)
+- [লং কটি](https://fashiondoniyabd.com/category/long-koti)
+- [গাউন / লেহেঙ্গা](https://fashiondoniyabd.com/category/gown-lehenga)
+- [শাড়ি](https://fashiondoniyabd.com/category/saree)
+- [গাউন](https://fashiondoniyabd.com/category/gown)
+- [কাস্টম ডিজাইন](https://fashiondoniyabd.com/category/custom-design)
+
+## Store Guides & Policies
+- [Measurement Guide](https://fashiondoniyabd.com/measurement-guide)
+- [FAQ](https://fashiondoniyabd.com/faq)
+- [Delivery Policy](https://fashiondoniyabd.com/delivery-policy)
+- [Return Policy](https://fashiondoniyabd.com/return-policy)
+- [Privacy Policy](https://fashiondoniyabd.com/privacy-policy)
+- [Terms & Conditions](https://fashiondoniyabd.com/terms)
+
+## Machine-Readable Feeds
+- [XML Sitemap](https://fashiondoniyabd.com/sitemap.xml)
+- [Google Merchant Feed](https://fashiondoniyabd.com/feed.xml)
+- [Summary Context](https://fashiondoniyabd.com/llms.txt)

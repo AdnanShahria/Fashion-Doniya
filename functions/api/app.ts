@@ -12,8 +12,13 @@ import { formatSanitizedError, isDemoModeActive } from './utils/helpers';
 import { globalApiRateLimiter } from './utils/rateLimiter';
 import { DEFAULT_INDEXNOW_KEY } from './config/cloudflare-env';
 import {
+  buildLlmsTxt,
   buildMerchantFeedXml,
+  buildRobotsTxt,
   buildSitemapXml,
+  renderCategorySsrResponse,
+  renderProductSsrResponse,
+  renderStorefrontSsrResponse,
   serveR2MediaRequest,
 } from './utils/edge-handlers';
 
@@ -353,10 +358,82 @@ const v1SubApp = createApiSubApp();
 app.route('/api/v1', v1SubApp);
 app.route('/api', v1SubApp);
 
-// 11. Edge Media, Sitemap, Merchant Feed & IndexNow routes (also handled by Pages Functions in prod)
+const FALLBACK_HTML_SHELL = `<!doctype html>
+<html lang="bn">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fashion Doniya BD</title>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>`;
+
+async function loadLocalHtmlTemplate(): Promise<string> {
+  try {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const cwd = typeof process !== 'undefined' && process.cwd ? process.cwd() : '.';
+    const candidates = [
+      path.resolve(cwd, 'frontend/dist/index.html'),
+      path.resolve(cwd, 'frontend/index.html'),
+    ];
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        return fs.readFileSync(candidate, 'utf8');
+      }
+    }
+  } catch {
+    // Running in Workers without filesystem access
+  }
+  return FALLBACK_HTML_SHELL;
+}
+
+function acceptsHtmlRequest(c: {
+  req: { path: string; header: (name: string) => string | undefined };
+}): boolean {
+  if (c.req.path === '/api' || c.req.path.startsWith('/api/')) return false;
+  const accept = (c.req.header('accept') || '').toLowerCase();
+  if (!accept) return true;
+  return accept.includes('text/html') || accept.includes('*/*');
+}
+
+function safeDecodeSlug(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+// 11. Edge Media, Sitemap, Merchant Feed, Crawler & Local Dev SSR Parity routes (handled by Pages Functions in prod)
 app.get('/media/*', async (c) => {
   const key = c.req.path.replace(/^\/media\//, '');
   return serveR2MediaRequest(c.req.raw, c.env, key);
+});
+
+app.get('/robots.txt', (c) => {
+  const origin = new URL(c.req.url).origin;
+  return c.text(buildRobotsTxt(c.env, origin), 200, {
+    'Cache-Control': 'public, max-age=3600',
+  });
+});
+
+app.get('/llms.txt', async (c) => {
+  const origin = new URL(c.req.url).origin;
+  const body = await buildLlmsTxt(c.env, origin, false);
+  return c.text(body, 200, {
+    'Cache-Control': 'public, max-age=1800',
+  });
+});
+
+app.get('/llms-full.txt', async (c) => {
+  const origin = new URL(c.req.url).origin;
+  const body = await buildLlmsTxt(c.env, origin, true);
+  return c.text(body, 200, {
+    'Cache-Control': 'public, max-age=1800',
+  });
 });
 
 app.get('/sitemap.xml', async (c) => {
@@ -374,6 +451,80 @@ app.get('/feed.xml', async (c) => {
     headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=1800' },
   });
 });
+
+app.get('/product/:slug', async (c, next) => {
+  if (!acceptsHtmlRequest(c)) return next();
+  const slug = safeDecodeSlug(c.req.param('slug')).trim();
+  if (!slug) return next();
+  const baseHtml = await loadLocalHtmlTemplate();
+  return renderProductSsrResponse(c.env, c.req.url, slug, baseHtml);
+});
+
+app.get('/product/*', async (c, next) => {
+  if (!acceptsHtmlRequest(c)) return next();
+  const rawSlug = c.req.path.replace(/^\/product\/?/, '').replace(/\/+$/, '');
+  if (!rawSlug) return next();
+  const baseHtml = await loadLocalHtmlTemplate();
+  return renderProductSsrResponse(c.env, c.req.url, safeDecodeSlug(rawSlug), baseHtml);
+});
+
+app.get('/category/:slug', async (c, next) => {
+  if (!acceptsHtmlRequest(c)) return next();
+  const slug = safeDecodeSlug(c.req.param('slug')).trim();
+  if (!slug) return next();
+  const baseHtml = await loadLocalHtmlTemplate();
+  return renderCategorySsrResponse(c.env, c.req.url, slug, baseHtml);
+});
+
+app.get('/category/*', async (c, next) => {
+  if (!acceptsHtmlRequest(c)) return next();
+  const rawSlug = c.req.path.replace(/^\/category\/?/, '').replace(/\/+$/, '');
+  if (!rawSlug) return next();
+  const baseHtml = await loadLocalHtmlTemplate();
+  return renderCategorySsrResponse(c.env, c.req.url, safeDecodeSlug(rawSlug), baseHtml);
+});
+
+const LOCAL_STOREFRONT_SSR_ROUTES = [
+  '/',
+  '/shop',
+  '/shop-2-5',
+  '/shop-3-5',
+  '/fabric/*',
+  '/admin',
+  '/admin/*',
+  '/sysadm',
+  '/sysadm/*',
+  '/account',
+  '/account/*',
+  '/cart',
+  '/checkout',
+  '/wishlist',
+  '/order-confirmation',
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+  '/about',
+  '/contact',
+  '/faq',
+  '/calculator',
+  '/custom-design',
+  '/fabric-to-outfit',
+  '/order-tracking',
+  '/measurement-guide',
+  '/delivery-policy',
+  '/return-policy',
+  '/privacy-policy',
+  '/terms',
+];
+
+for (const routePath of LOCAL_STOREFRONT_SSR_ROUTES) {
+  app.get(routePath, async (c, next) => {
+    if (!acceptsHtmlRequest(c)) return next();
+    const baseHtml = await loadLocalHtmlTemplate();
+    return renderStorefrontSsrResponse(c.env, c.req.url, baseHtml);
+  });
+}
 
 app.get('/:keyFile', (c, next) => {
   const file = c.req.param('keyFile');

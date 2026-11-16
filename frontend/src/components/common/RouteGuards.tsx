@@ -1,14 +1,24 @@
 import React from 'react';
-import { Navigate } from 'react-router';
+import { Navigate, useLocation } from 'react-router';
 import { useStore } from '../../context/StoreContext';
 import { useHomeStore } from '../../store/homeStore';
 import { isFeatureEnabled, type FeatureFlagKey } from '../../config/tierCapabilities';
+import { getAdminAuthToken } from '../../services/api';
 
 export const ProtectedRoute: React.FC<{
   role?: 'user' | 'admin';
   children: React.ReactNode;
 }> = ({ role = 'user', children }) => {
   const { currentUser } = useStore();
+  const location = useLocation();
+
+  if (role === 'admin' && !getAdminAuthToken()) {
+    if (location.pathname !== '/admin') {
+      return <Navigate to="/admin" replace />;
+    }
+    return <>{children}</>;
+  }
+
   if (role === 'user' && !currentUser) {
     // Allow AccountPage to render its own inline login/register screen
     return <>{children}</>;

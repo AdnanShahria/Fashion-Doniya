@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import type { AppEnv } from '../types';
 import { systemSettings, otpCodes } from '../../../backend/server/db/schemas/index';
 import { getSysadmEmail, signSysadmJwt, verifySysadmRequest } from '../utils/sysadmAuth';
-import { hashPassword, verifyPassword } from '../utils/auth-helper';
+import { hashPassword, verifyPassword, generateSecureOtp } from '../utils/auth-helper';
 import { sendTransactionalEmail, getEmailProvidersStatus } from '../utils/email';
 import { invalidateHomeCache } from '../utils/cache';
 import { clearBulkMicroCache } from './bulk';
@@ -21,7 +21,7 @@ sysadmRouter.post('/request-otp', authRateLimiter, async (c) => {
     return c.json({ success: false, message: 'Unauthorized SuperAdmin email.' }, 403);
   }
 
-  const code = String(Math.floor(100000 + Math.random() * 900000));
+  const code = generateSecureOtp();
   const { salt, hash } = await hashPassword(code);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
@@ -44,10 +44,20 @@ sysadmRouter.post('/request-otp', authRateLimiter, async (c) => {
     text: `Your SuperAdmin login OTP is: ${code}`,
   });
 
+  let hostname = '';
+  try {
+    hostname = new URL(c.req.url).hostname;
+  } catch {
+    hostname = '';
+  }
+  const isLocalDev =
+    c.env?.NODE_ENV !== 'production' &&
+    (hostname === 'localhost' || hostname === '127.0.0.1');
+
   return c.json({
     success: true,
     message: 'OTP dispatched.',
-    ...(c.env?.NODE_ENV !== 'production' ? { devOtp: code } : {}),
+    ...(isLocalDev ? { devOtp: code } : {}),
   });
 });
 

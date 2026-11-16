@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Link } from 'react-router';
 import { useStore } from '../../context/StoreContext';
 import { BrandLogo } from './BrandLogo';
 import { useAppLanguage, applyDocumentLanguage } from '../../utils/languageTranslator';
@@ -108,52 +109,59 @@ export const Header: React.FC = () => {
     { label: 'ডেমো অ্যাডমিন প্যানেল', action: () => navigateTo('admin') }
   ];
 
+  const resolveHeaderHref = (page: string): string => {
+    if (page === 'home') return '/';
+    if (page === 'shop-3-5') return '/fabric/3.5-bahar';
+    if (page === 'shop-2-5') return '/fabric/2.5-bahar';
+    return `/${page}`;
+  };
+
   const defaultMainNavLinks = [
     {
       label: 'হোম',
+      to: '/',
       isHome: true,
-      isActive: currentPage === 'home',
-      onClick: () => navigateTo('home')
+      isActive: currentPage === 'home'
     },
     {
       label: '৩.৫ বহর কাপড়',
-      isActive: currentPage === 'fabric-width' && selectedWidthFilter === '3.5',
-      onClick: () => navigateTo('fabric-width', { width: '3.5' })
+      to: '/fabric/3.5-bahar',
+      isActive: currentPage === 'fabric-width' && selectedWidthFilter === '3.5'
     },
     {
       label: '২.৫ বহর কাপড়',
-      isActive: currentPage === 'fabric-width' && selectedWidthFilter === '2.5',
-      onClick: () => navigateTo('fabric-width', { width: '2.5' })
+      to: '/fabric/2.5-bahar',
+      isActive: currentPage === 'fabric-width' && selectedWidthFilter === '2.5'
     },
     {
       label: 'সকল কাপড়',
-      isActive: currentPage === 'shop',
-      onClick: () => navigateTo('shop', { width: 'all' })
+      to: '/shop',
+      isActive: currentPage === 'shop'
     },
     {
       label: 'শাড়ি',
-      isActive: currentPage === 'category-gallery' && selectedCategory === 'saree',
-      onClick: () => navigateTo('category-gallery', { width: '3.5', category: 'saree' })
+      to: '/fabric/3.5-bahar/saree',
+      isActive: currentPage === 'category-gallery' && selectedCategory === 'saree'
     },
     {
       label: 'কামিজ',
-      isActive: currentPage === 'category-gallery' && selectedCategory === 'kamiz',
-      onClick: () => navigateTo('category-gallery', { width: '3.5', category: 'kamiz' })
+      to: '/fabric/3.5-bahar/kamiz',
+      isActive: currentPage === 'category-gallery' && selectedCategory === 'kamiz'
     },
     {
       label: 'গাউন / লেহেঙ্গা',
-      isActive: currentPage === 'category-gallery' && selectedCategory === 'gown-lehenga',
-      onClick: () => navigateTo('category-gallery', { width: '3.5', category: 'gown-lehenga' })
+      to: '/fabric/3.5-bahar/gown-lehenga',
+      isActive: currentPage === 'category-gallery' && selectedCategory === 'gown-lehenga'
     },
     {
       label: 'কাস্টম ডিজাইন',
-      isActive: currentPage === 'custom-design',
-      onClick: () => navigateTo('custom-design')
+      to: '/custom-design',
+      isActive: currentPage === 'custom-design'
     },
     {
       label: 'গজ হিসাব',
-      isActive: currentPage === 'calculator',
-      onClick: () => navigateTo('calculator')
+      to: '/calculator',
+      isActive: currentPage === 'calculator'
     }
   ];
 
@@ -161,27 +169,19 @@ export const Header: React.FC = () => {
     .filter((item) => item.isActive !== false && item.page !== 'fabric-to-outfit' && item.label !== 'এআই আউটফিট')
     .sort((a, b) => a.order - b.order);
 
-  // Use custom navigation whenever Admin configured headerItems, otherwise use default 10 links
+  // Use custom navigation whenever Admin configured headerItems, otherwise use default links
   const mainNavLinks =
     customHeaderItems.length > 0
       ? customHeaderItems.map((item) => ({
           label: item.label,
+          to: resolveHeaderHref(item.page),
           isHome: item.page === 'home',
           isActive:
             item.page === 'shop-3-5'
               ? currentPage === 'fabric-width' && selectedWidthFilter === '3.5'
               : item.page === 'shop-2-5'
               ? currentPage === 'fabric-width' && selectedWidthFilter === '2.5'
-              : currentPage === item.page,
-          onClick: () => {
-            if (item.page === 'shop-3-5') {
-              navigateTo('fabric-width', { width: '3.5' });
-            } else if (item.page === 'shop-2-5') {
-              navigateTo('fabric-width', { width: '2.5' });
-            } else {
-              navigateTo(item.page);
-            }
-          }
+              : currentPage === item.page
         }))
       : defaultMainNavLinks;
 
@@ -200,12 +200,9 @@ export const Header: React.FC = () => {
         {/* 2×3 Grid of Outfit Category Cards */}
         <div className="grid grid-cols-2 gap-2">
           {/* 1. কামিজ */}
-          <button
-            type="button"
-            onClick={() => {
-              navigateTo('category-gallery', { width: '3.5', category: 'kamiz' });
-              closeMenu();
-            }}
+          <Link
+            to="/fabric/3.5-bahar/kamiz"
+            onClick={closeMenu}
             className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-[#FDFBF7] hover:bg-[#FAF2E6] border border-[#E6D8C5] shadow-[0_2px_6px_rgba(107,8,18,0.04)] transition-all cursor-pointer group text-left"
           >
             <svg className="w-6 h-6 shrink-0 text-[#7A0916]" viewBox="0 0 28 28" fill="none">
@@ -221,15 +218,12 @@ export const Header: React.FC = () => {
             <span className="text-[13.5px] font-bold text-[#241614] group-hover:text-[#6B0812] truncate">
               কামিজ
             </span>
-          </button>
+          </Link>
 
           {/* 2. শর্ট কামিজ */}
-          <button
-            type="button"
-            onClick={() => {
-              navigateTo('category-gallery', { width: '3.5', category: 'short-kamiz' });
-              closeMenu();
-            }}
+          <Link
+            to="/fabric/3.5-bahar/short-kamiz"
+            onClick={closeMenu}
             className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-[#FDFBF7] hover:bg-[#FAF2E6] border border-[#E6D8C5] shadow-[0_2px_6px_rgba(107,8,18,0.04)] transition-all cursor-pointer group text-left"
           >
             <svg className="w-6 h-6 shrink-0 text-[#7A0916]" viewBox="0 0 28 28" fill="none">
@@ -245,15 +239,12 @@ export const Header: React.FC = () => {
             <span className="text-[13.5px] font-bold text-[#241614] group-hover:text-[#6B0812] truncate">
               শর্ট কামিজ
             </span>
-          </button>
+          </Link>
 
           {/* 3. গাউন / লেহেঙ্গা */}
-          <button
-            type="button"
-            onClick={() => {
-              navigateTo('category-gallery', { width: '3.5', category: 'gown-lehenga' });
-              closeMenu();
-            }}
+          <Link
+            to="/fabric/3.5-bahar/gown-lehenga"
+            onClick={closeMenu}
             className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-[#FDFBF7] hover:bg-[#FAF2E6] border border-[#E6D8C5] shadow-[0_2px_6px_rgba(107,8,18,0.04)] transition-all cursor-pointer group text-left"
           >
             <svg className="w-6 h-6 shrink-0 text-[#7A0916]" viewBox="0 0 28 28" fill="none">
@@ -276,15 +267,12 @@ export const Header: React.FC = () => {
             <span className="text-[13px] font-bold text-[#241614] group-hover:text-[#6B0812] truncate">
               গাউন / লেহেঙ্গা
             </span>
-          </button>
+          </Link>
 
           {/* 4. কোটি */}
-          <button
-            type="button"
-            onClick={() => {
-              navigateTo('category-gallery', { width: '3.5', category: 'long-koti' });
-              closeMenu();
-            }}
+          <Link
+            to="/fabric/3.5-bahar/long-koti"
+            onClick={closeMenu}
             className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-[#FDFBF7] hover:bg-[#FAF2E6] border border-[#E6D8C5] shadow-[0_2px_6px_rgba(107,8,18,0.04)] transition-all cursor-pointer group text-left"
           >
             <svg className="w-6 h-6 shrink-0 text-[#7A0916]" viewBox="0 0 28 28" fill="none">
@@ -301,15 +289,12 @@ export const Header: React.FC = () => {
             <span className="text-[13.5px] font-bold text-[#241614] group-hover:text-[#6B0812] truncate">
               কোটি
             </span>
-          </button>
+          </Link>
 
           {/* 5. শাড়ি */}
-          <button
-            type="button"
-            onClick={() => {
-              navigateTo('category-gallery', { width: '3.5', category: 'saree' });
-              closeMenu();
-            }}
+          <Link
+            to="/fabric/3.5-bahar/saree"
+            onClick={closeMenu}
             className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-[#FDFBF7] hover:bg-[#FAF2E6] border border-[#E6D8C5] shadow-[0_2px_6px_rgba(107,8,18,0.04)] transition-all cursor-pointer group text-left"
           >
             <svg className="w-6 h-6 shrink-0 text-[#7A0916]" viewBox="0 0 28 28" fill="none">
@@ -331,15 +316,12 @@ export const Header: React.FC = () => {
             <span className="text-[13.5px] font-bold text-[#241614] group-hover:text-[#6B0812] truncate">
               শাড়ি
             </span>
-          </button>
+          </Link>
 
           {/* 6. ব্লাউজ */}
-          <button
-            type="button"
-            onClick={() => {
-              navigateTo('custom-design');
-              closeMenu();
-            }}
+          <Link
+            to="/custom-design"
+            onClick={closeMenu}
             className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-[#FDFBF7] hover:bg-[#FAF2E6] border border-[#E6D8C5] shadow-[0_2px_6px_rgba(107,8,18,0.04)] transition-all cursor-pointer group text-left"
           >
             <svg className="w-6 h-6 shrink-0 text-[#7A0916]" viewBox="0 0 28 28" fill="none">
@@ -355,16 +337,13 @@ export const Header: React.FC = () => {
             <span className="text-[13.5px] font-bold text-[#241614] group-hover:text-[#6B0812] truncate">
               ব্লাউজ
             </span>
-          </button>
+          </Link>
         </div>
 
         {/* Full-Width কাস্টম ডিজাইন Card */}
-        <button
-          type="button"
-          onClick={() => {
-            navigateTo('custom-design');
-            closeMenu();
-          }}
+        <Link
+          to="/custom-design"
+          onClick={closeMenu}
           className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#FDFBF7] hover:bg-[#FAF2E6] border border-[#E6D8C5] text-[#241614] shadow-[0_2px_6px_rgba(107,8,18,0.04)] transition-all cursor-pointer group"
         >
           <span className="flex items-center gap-3">
@@ -374,7 +353,7 @@ export const Header: React.FC = () => {
             </span>
           </span>
           <ChevronRight className="w-4 h-4 text-[#6B0812] transition-transform group-hover:translate-x-0.5" />
-        </button>
+        </Link>
       </div>
 
       {/* Section 2: সেবা ও অন্যান্য */}
@@ -412,12 +391,9 @@ export const Header: React.FC = () => {
 
         <div className="space-y-2">
           {/* 1. অর্ডার ট্র্যাকিং */}
-          <button
-            type="button"
-            onClick={() => {
-              navigateTo('order-tracking');
-              closeMenu();
-            }}
+          <Link
+            to="/order-tracking"
+            onClick={closeMenu}
             className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#FDFBF7] hover:bg-[#FAF2E6] border border-[#E6D8C5] text-[#241614] shadow-[0_2px_6px_rgba(107,8,18,0.04)] transition-all cursor-pointer group"
           >
             <span className="flex items-center gap-3">
@@ -427,15 +403,12 @@ export const Header: React.FC = () => {
               </span>
             </span>
             <ChevronRight className="w-4 h-4 text-[#6B0812] transition-transform group-hover:translate-x-0.5" />
-          </button>
+          </Link>
 
           {/* 2. গজ হিসাব ক্যালকুলেটর */}
-          <button
-            type="button"
-            onClick={() => {
-              navigateTo('calculator');
-              closeMenu();
-            }}
+          <Link
+            to="/calculator"
+            onClick={closeMenu}
             className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#FDFBF7] hover:bg-[#FAF2E6] border border-[#E6D8C5] text-[#241614] shadow-[0_2px_6px_rgba(107,8,18,0.04)] transition-all cursor-pointer group"
           >
             <span className="flex items-center gap-3">
@@ -445,7 +418,7 @@ export const Header: React.FC = () => {
               </span>
             </span>
             <ChevronRight className="w-4 h-4 text-[#6B0812] transition-transform group-hover:translate-x-0.5" />
-          </button>
+          </Link>
         </div>
       </div>
     </div>
@@ -464,10 +437,13 @@ export const Header: React.FC = () => {
         <div className="py-2 sm:py-3.5 flex items-center justify-between gap-2 sm:gap-4 lg:gap-6">
           {/* Left: Fashion Doniya BD Brand Lockup */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink-0">
-            <button
-              type="button"
-              onClick={() => navigateTo('home')}
-              className="text-left group cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] focus-visible:ring-offset-2 min-w-0"
+            <Link
+              to="/"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                setCategoryDropdownOpen(false);
+              }}
+              className="block text-left group cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] focus-visible:ring-offset-2 min-w-0"
             >
               <div className="min-w-0">
                 <div className="font-['Playfair_Display'] text-[18px] sm:text-[28px] lg:text-[30px] font-bold tracking-tight leading-none whitespace-nowrap flex items-baseline">
@@ -494,7 +470,7 @@ export const Header: React.FC = () => {
                   প্রিমিয়াম কাপড়, এখন গজ হিসেবে
                 </p>
               </div>
-            </button>
+            </Link>
           </div>
 
           {/* Center: Clean Search Bar (Tablet & Desktop) */}
@@ -566,9 +542,8 @@ export const Header: React.FC = () => {
             </button>
 
             {/* Account Button (Desktop/Tablet only; Mobile uses Bottom Nav) */}
-            <button
-              type="button"
-              onClick={() => navigateTo('account')}
+            <Link
+              to="/account"
               className="hidden sm:flex sm:w-auto sm:h-9 sm:px-3.5 rounded-full bg-[#FFFDF9]/90 border border-[#DFCBB2] hover:border-[#8A5A10] hover:bg-[#FFFDF9] text-[13px] font-semibold text-[#241614] items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
               title="কাস্টমার অ্যাকাউন্ট"
               aria-label="কাস্টমার অ্যাকাউন্ট"
@@ -577,12 +552,11 @@ export const Header: React.FC = () => {
               <span>
                 {currentUser ? currentUser.fullName.split(' ')[0] : 'অ্যাকাউন্ট'}
               </span>
-            </button>
+            </Link>
 
             {/* Wishlist Button */}
-            <button
-              type="button"
-              onClick={() => navigateTo('wishlist')}
+            <Link
+              to="/wishlist"
               className="w-9 h-9 sm:w-auto sm:h-9 sm:px-3.5 rounded-full bg-[#FFFDF9]/90 border border-[#DFCBB2] hover:border-[#8A5A10] hover:bg-[#FFFDF9] text-xs sm:text-[13px] font-semibold text-[#241614] flex items-center justify-center gap-1.5 transition-all active:scale-95 relative cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
               title="উইশলিস্ট"
               aria-label="উইশলিস্ট"
@@ -594,19 +568,18 @@ export const Header: React.FC = () => {
                   {wishlist.length}
                 </span>
               )}
-            </button>
+            </Link>
 
             {/* Shopping Cart Pill Button (Primary Prominent Header Action) */}
-            <button
-              type="button"
-              onClick={() => navigateTo('cart')}
+            <Link
+              to="/cart"
               className="h-9 px-3.5 sm:px-4 rounded-full bg-[#6B0812] hover:bg-[#53050D] active:scale-[0.98] text-white text-xs sm:text-[13.5px] font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-[0_4px_12px_rgba(107,8,18,0.22),inset_0_1px_0_rgba(255,255,255,0.16)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] focus-visible:ring-offset-2"
               title="শপিং কার্ট"
               aria-label="শপিং কার্ট"
             >
               <ShoppingCart className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white stroke-[2] shrink-0" />
               <span className="tabular-nums">কার্ট ({cartItemCount})</span>
-            </button>
+            </Link>
           </div>
         </div>
 
@@ -629,10 +602,10 @@ export const Header: React.FC = () => {
 
           <nav aria-label="প্রধান নেভিগেশন" className="flex items-center gap-4 text-[12px] font-semibold shrink-0 pr-2">
             {mainNavLinks.map((link) => (
-              <button
+              <Link
                 key={link.label}
-                type="button"
-                onClick={link.onClick}
+                to={link.to}
+                onClick={() => setMobileMenuOpen(false)}
                 className={`relative py-1.5 flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] rounded-md ${
                   link.isActive
                     ? 'text-[#6B0812] font-bold'
@@ -644,7 +617,7 @@ export const Header: React.FC = () => {
                 {link.isActive && (
                   <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#6B0812] rounded-full" />
                 )}
-              </button>
+              </Link>
             ))}
           </nav>
         </div>
@@ -714,10 +687,10 @@ export const Header: React.FC = () => {
           {/* Right/Center Navigation Links */}
           <nav aria-label="প্রধান নেভিগেশন" className="flex items-center justify-between flex-1 max-w-4xl text-[15px] font-semibold">
             {mainNavLinks.map((link) => (
-              <button
+              <Link
                 key={link.label}
-                type="button"
-                onClick={link.onClick}
+                to={link.to}
+                onClick={() => setCategoryDropdownOpen(false)}
                 className={`relative py-1.5 px-1.5 flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] ${
                   link.isActive
                     ? 'text-[#6B0812] font-bold'
@@ -729,7 +702,7 @@ export const Header: React.FC = () => {
                 {link.isActive && (
                   <span className="absolute bottom-0 left-1 right-1 h-[2px] bg-[#6B0812] rounded-full" />
                 )}
-              </button>
+              </Link>
             ))}
           </nav>
         </div>

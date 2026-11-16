@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link, useLocation } from 'react-router';
 import { useStore } from '../context/StoreContext';
 import { orderService } from '../services/orderService';
 import { StorageService } from '../services/storageService';
@@ -36,24 +37,37 @@ export const AccountPage: React.FC = () => {
     navigateTo,
   } = useStore();
 
+  const location = useLocation();
+  const cleanInitialPath = location.pathname.replace(/\/+$/, '') || '/';
+
   // Auth Tabs & Mode
-  const [authTab, setAuthTab] = useState<'login' | 'register'>('login');
-  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [authTab, setAuthTab] = useState<'login' | 'register'>(() =>
+    cleanInitialPath === '/register' ? 'register' : 'login'
+  );
+  const [isForgotPassword, setIsForgotPassword] = useState(() =>
+    cleanInitialPath === '/forgot-password' ||
+    cleanInitialPath === '/account/forgot-password' ||
+    cleanInitialPath === '/reset-password' ||
+    cleanInitialPath === '/account/reset-password'
+  );
 
   // Login Fields
-  const [loginPhone, setLoginPhone] = useState('');
+  const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
   // Register Fields
   const [regName, setRegName] = useState('');
   const [regPhone, setRegPhone] = useState('');
+  const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
 
   // Forgot Password Fields
-  const [resetPhone, setResetPhone] = useState('');
+  const [resetIdentifier, setResetIdentifier] = useState('');
   const [resetOtp, setResetOtp] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
+  const [otpSent, setOtpSent] = useState(
+    () => cleanInitialPath === '/reset-password' || cleanInitialPath === '/account/reset-password'
+  );
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
@@ -72,22 +86,51 @@ export const AccountPage: React.FC = () => {
   const [profileName, setProfileName] = useState(currentUser?.fullName || '');
   const [profileEmail, setProfileEmail] = useState(currentUser?.email || '');
   const [fullAddress, setFullAddress] = useState(
-    currentUser?.address?.fullAddress || 'ফ্ল্যাট ৪বি, বাড়ি ২৭, রোড ৮, ধানমন্ডি, ঢাকা'
+    currentUser?.address?.fullAddress || currentUser?.fullAddress || ''
   );
-  const [district, setDistrict] = useState(currentUser?.address?.district || 'ঢাকা');
+  const [district, setDistrict] = useState(
+    currentUser?.address?.district || currentUser?.district || 'ঢাকা'
+  );
+  const [upazila, setUpazila] = useState(
+    currentUser?.address?.upazila || currentUser?.upazila || ''
+  );
+  const [area, setArea] = useState(currentUser?.address?.area || '');
   const [profileCurrentPassword, setProfileCurrentPassword] = useState('');
   const [profileNewPassword, setProfileNewPassword] = useState('');
   const [showProfilePassword, setShowProfilePassword] = useState(false);
   const [serverUserOrders, setServerUserOrders] = useState<Order[] | null>(null);
 
   useEffect(() => {
+    const path = location.pathname.replace(/\/+$/, '') || '/';
+    if (path === '/register') {
+      setAuthTab('register');
+      setIsForgotPassword(false);
+      setOtpSent(false);
+      setFeedback(null);
+    } else if (path === '/login') {
+      setAuthTab('login');
+      setIsForgotPassword(false);
+      setOtpSent(false);
+      setFeedback(null);
+    } else if (path === '/forgot-password' || path === '/account/forgot-password') {
+      setIsForgotPassword(true);
+      setOtpSent(false);
+      setFeedback(null);
+    } else if (path === '/reset-password' || path === '/account/reset-password') {
+      setIsForgotPassword(true);
+      setOtpSent(true);
+      setFeedback(null);
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
     if (currentUser) {
       setProfileName(currentUser.fullName);
       setProfileEmail(currentUser.email || '');
-      setFullAddress(
-        currentUser.address?.fullAddress || 'ফ্ল্যাট ৪বি, বাড়ি ২৭, রোড ৮, ধানমন্ডি, ঢাকা'
-      );
-      setDistrict(currentUser.address?.district || 'ঢাকা');
+      setFullAddress(currentUser.address?.fullAddress || currentUser.fullAddress || '');
+      setDistrict(currentUser.address?.district || currentUser.district || 'ঢাকা');
+      setUpazila(currentUser.address?.upazila || currentUser.upazila || '');
+      setArea(currentUser.address?.area || '');
       api
         .get('/orders/my')
         .then((res) => {
@@ -113,18 +156,36 @@ export const AccountPage: React.FC = () => {
         )
     : [];
 
+  const isPhoneLike = (val: string) =>
+    !val.includes('@') && /^[\d০-৯+\s-]*$/.test(val.trim());
+
   const handleSendResetOtp = async () => {
     setFeedback(null);
-    const normalized = StorageService.normalizePhone(resetPhone);
-    if (!/^01[3-9]\d{8}$/.test(normalized)) {
-      setFeedback({
-        type: 'error',
-        text: 'সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)',
-      });
-      return;
+    const raw = resetIdentifier.trim();
+    let targetIdentifier = '';
+    if (raw.includes('@')) {
+      const email = raw.toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setFeedback({
+          type: 'error',
+          text: 'সঠিক ইমেইল ঠিকানা দিন (যেমন: name@example.com)',
+        });
+        return;
+      }
+      targetIdentifier = email;
+    } else {
+      const normalized = StorageService.normalizePhone(raw);
+      if (!/^01[3-9]\d{8}$/.test(normalized)) {
+        setFeedback({
+          type: 'error',
+          text: 'সঠিক ১১ ডিজিটের মোবাইল নম্বর অথবা ইমেইল দিন (যেমন: 017XXXXXXXX)',
+        });
+        return;
+      }
+      targetIdentifier = normalized;
     }
     setIsSendingOtp(true);
-    const res = await requestPasswordResetOtp(normalized);
+    const res = await requestPasswordResetOtp(targetIdentifier);
     setIsSendingOtp(false);
     if (res.success) {
       setOtpSent(true);
@@ -174,7 +235,11 @@ export const AccountPage: React.FC = () => {
         });
         return;
       }
-      const ok = await resetPassword(resetPhone, newPassword, resetOtp.trim());
+      const rawReset = resetIdentifier.trim();
+      const targetResetId = rawReset.includes('@')
+        ? rawReset.toLowerCase()
+        : StorageService.normalizePhone(rawReset) || rawReset;
+      const ok = await resetPassword(targetResetId, newPassword, resetOtp.trim());
       if (!ok) {
         setFeedback({
           type: 'error',
@@ -182,8 +247,7 @@ export const AccountPage: React.FC = () => {
         });
         return;
       }
-      const normalized = StorageService.normalizePhone(resetPhone);
-      setLoginPhone(normalized);
+      setLoginIdentifier(targetResetId);
       setLoginPassword(newPassword);
       setNewPassword('');
       setConfirmNewPassword('');
@@ -198,6 +262,13 @@ export const AccountPage: React.FC = () => {
 
     // 2. Register Flow
     if (authTab === 'register') {
+      if (regEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail.trim().toLowerCase())) {
+        setFeedback({
+          type: 'error',
+          text: 'সঠিক ইমেইল ঠিকানা দিন অথবা ঘরটি ফাঁকা রাখুন।',
+        });
+        return;
+      }
       if (regPassword !== regConfirmPassword) {
         setFeedback({
           type: 'error',
@@ -205,42 +276,62 @@ export const AccountPage: React.FC = () => {
         });
         return;
       }
-      const ok = await registerUser(regName, regPhone, regPassword);
+      const ok = await registerUser(regName, regPhone, regPassword, regEmail);
       if (!ok) {
         const normalized = StorageService.normalizePhone(regPhone);
         const isValidPhone = /^01[3-9]\d{8}$/.test(normalized);
-      setFeedback({
-        type: 'error',
-        text:
-          regName.trim().length < 2
-            ? 'অনুগ্রহ করে আপনার পুরো নাম লিখুন'
-            : !isValidPhone
-            ? 'সঠিক ১১ ডিজিটের বাংলাদেশী মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)'
-            : regPassword.trim().length < 6
-            ? 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে'
-            : 'এই মোবাইল নম্বর দিয়ে ইতিমধ্যে অ্যাকাউন্ট খোলা আছে। অনুগ্রহ করে লগইন করুন।',
-      });
+        setFeedback({
+          type: 'error',
+          text:
+            regName.trim().length < 2
+              ? 'অনুগ্রহ করে আপনার পুরো নাম লিখুন'
+              : !isValidPhone
+              ? 'সঠিক ১১ ডিজিটের বাংলাদেশী মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)'
+              : regPassword.trim().length < 6
+              ? 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে'
+              : 'এই মোবাইল নম্বর বা ইমেইল দিয়ে ইতিমধ্যে অ্যাকাউন্ট খোলা আছে অথবা তথ্য সঠিক নয়।',
+        });
       }
       return;
     }
 
     // 3. Login Flow
-    const ok = await loginUser(loginPhone, loginPassword);
-    if (!ok) {
-      const normalized = StorageService.normalizePhone(loginPhone);
-      const isValidPhone = /^01[3-9]\d{8}$/.test(normalized);
-      const exists = StorageService.getSavedUsers().some(
-        (u) => StorageService.normalizePhone(u.phone) === normalized
-      );
+    const rawLogin = loginIdentifier.trim();
+    let normalizedLoginId = rawLogin;
+    if (rawLogin.includes('@')) {
+      normalizedLoginId = rawLogin.toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedLoginId)) {
+        setFeedback({
+          type: 'error',
+          text: 'সঠিক ইমেইল ঠিকানা দিন (যেমন: name@example.com)',
+        });
+        return;
+      }
+    } else {
+      const normalized = StorageService.normalizePhone(rawLogin);
+      if (!/^01[3-9]\d{8}$/.test(normalized)) {
+        setFeedback({
+          type: 'error',
+          text: 'সঠিক ১১ ডিজিটের বাংলাদেশী মোবাইল নম্বর অথবা ইমেইল দিন',
+        });
+        return;
+      }
+      normalizedLoginId = normalized;
+    }
+
+    if (loginPassword.trim().length < 4) {
       setFeedback({
         type: 'error',
-        text: !isValidPhone
-          ? 'সঠিক ১১ ডিজিটের বাংলাদেশী মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)'
-          : loginPassword.trim().length < 4
-          ? 'অনুগ্রহ করে কমপক্ষে ৪ অক্ষরের পাসওয়ার্ড দিন'
-          : !exists
-          ? 'এই মোবাইল নম্বর দিয়ে কোনো অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে প্রথমে রেজিস্টার করুন।'
-          : 'পাসওয়ার্ড সঠিক নয়! আবার চেষ্টা করুন অথবা পাসওয়ার্ড রিসেট করুন।',
+        text: 'অনুগ্রহ করে কমপক্ষে ৪ অক্ষরের পাসওয়ার্ড দিন',
+      });
+      return;
+    }
+
+    const ok = await loginUser(normalizedLoginId, loginPassword);
+    if (!ok) {
+      setFeedback({
+        type: 'error',
+        text: 'মোবাইল নম্বর/ইমেইল বা পাসওয়ার্ড সঠিক নয়। অনুগ্রহ করে পুনরায় চেষ্টা করুন।',
       });
     }
   };
@@ -248,7 +339,7 @@ export const AccountPage: React.FC = () => {
   const handleFillDemoCredentials = () => {
     setIsForgotPassword(false);
     setAuthTab('login');
-    setLoginPhone('01711223344');
+    setLoginIdentifier('01711223344');
     setLoginPassword('123456');
     setFeedback({
       type: 'success',
@@ -260,12 +351,15 @@ export const AccountPage: React.FC = () => {
     e.preventDefault();
     updateUserProfile({
       fullName: profileName.trim() || currentUser?.fullName,
-      email: profileEmail.trim() || currentUser?.email,
+      email: profileEmail.trim() || undefined,
+      district: district.trim(),
+      upazila: upazila.trim(),
+      fullAddress: fullAddress.trim(),
       address: {
-        district,
-        upazila: '',
-        area: '',
-        fullAddress,
+        district: district.trim(),
+        upazila: upazila.trim(),
+        area: area.trim(),
+        fullAddress: fullAddress.trim(),
       },
     });
   };
@@ -390,7 +484,7 @@ export const AccountPage: React.FC = () => {
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-[11px] font-bold text-[#2B1816]">
-                        নিবন্ধিত মোবাইল নম্বর <span className="text-[#9E0B16]">*</span>
+                        নিবন্ধিত মোবাইল নম্বর বা ইমেইল <span className="text-[#9E0B16]">*</span>
                       </label>
                       <button
                         type="button"
@@ -407,22 +501,25 @@ export const AccountPage: React.FC = () => {
                     </div>
                     <div className="flex items-stretch rounded-xl border border-[#E2D0B8] focus-within:border-[#6B0812] bg-[#FDFBF7] overflow-hidden transition-colors">
                       <div className="px-2.5 bg-[#F6EDE0] border-r border-[#E2D0B8] flex items-center gap-1 text-xs font-bold text-[#6B0812] shrink-0 select-none">
-                        <span>+880</span>
+                        {isPhoneLike(resetIdentifier) ? (
+                          <span>+880</span>
+                        ) : (
+                          <Mail className="w-3.5 h-3.5" />
+                        )}
                       </div>
                       <input
-                        type="tel"
-                        inputMode="numeric"
-                        value={resetPhone}
+                        type="text"
+                        value={resetIdentifier}
                         onChange={(e) => {
-                          setResetPhone(e.target.value);
+                          setResetIdentifier(e.target.value);
                           if (otpSent) {
                             setOtpSent(false);
                             setResetOtp('');
                           }
                         }}
-                        placeholder="017XXXXXXXX"
+                        placeholder="017XXXXXXXX বা name@example.com"
                         required
-                        className="w-full px-3 py-2 text-xs font-semibold text-[#241614] placeholder:text-[#8C7A72] bg-transparent outline-none tabular-nums"
+                        className="w-full px-3 py-2 text-xs font-semibold text-[#241614] placeholder:text-[#8C7A72] bg-transparent outline-none"
                       />
                     </div>
                   </div>
@@ -568,6 +665,22 @@ export const AccountPage: React.FC = () => {
 
                   <div>
                     <label className="block text-[11px] font-bold text-[#2B1816] mb-1">
+                      ইমেইল ঠিকানা <span className="text-[#8C7A72] font-normal">(ঐচ্ছিক)</span>
+                    </label>
+                    <div className="relative flex items-center">
+                      <Mail className="w-4 h-4 text-[#6B0812]/60 absolute left-3 pointer-events-none" />
+                      <input
+                        type="email"
+                        value={regEmail}
+                        onChange={(e) => setRegEmail(e.target.value)}
+                        placeholder="name@example.com"
+                        className="w-full bg-[#FDFBF7] border border-[#E2D0B8] focus:border-[#6B0812] rounded-xl pl-9 pr-3 py-2 text-xs font-medium text-[#241614] placeholder:text-[#8C7A72] outline-none transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-[#2B1816] mb-1">
                       পাসওয়ার্ড তৈরি করুন <span className="text-[#9E0B16]">*</span>
                     </label>
                     <div className="relative flex items-center rounded-xl border border-[#E2D0B8] focus-within:border-[#6B0812] bg-[#FDFBF7] overflow-hidden transition-colors">
@@ -631,20 +744,23 @@ export const AccountPage: React.FC = () => {
                 <>
                   <div>
                     <label className="block text-[11px] font-bold text-[#2B1816] mb-1">
-                      মোবাইল নম্বর <span className="text-[#9E0B16]">*</span>
+                      মোবাইল নম্বর অথবা ইমেইল <span className="text-[#9E0B16]">*</span>
                     </label>
                     <div className="flex items-stretch rounded-xl border border-[#E2D0B8] focus-within:border-[#6B0812] bg-[#FDFBF7] overflow-hidden transition-colors">
                       <div className="px-2.5 bg-[#F6EDE0] border-r border-[#E2D0B8] flex items-center gap-1 text-xs font-bold text-[#6B0812] shrink-0 select-none">
-                        <span>+880</span>
+                        {isPhoneLike(loginIdentifier) ? (
+                          <span>+880</span>
+                        ) : (
+                          <Mail className="w-3.5 h-3.5" />
+                        )}
                       </div>
                       <input
-                        type="tel"
-                        inputMode="numeric"
-                        value={loginPhone}
-                        onChange={(e) => setLoginPhone(e.target.value)}
-                        placeholder="01711223344"
+                        type="text"
+                        value={loginIdentifier}
+                        onChange={(e) => setLoginIdentifier(e.target.value)}
+                        placeholder="01711223344 বা name@example.com"
                         required
-                        className="w-full px-3 py-2 text-xs font-semibold text-[#241614] placeholder:text-[#8C7A72] bg-transparent outline-none tabular-nums"
+                        className="w-full px-3 py-2 text-xs font-semibold text-[#241614] placeholder:text-[#8C7A72] bg-transparent outline-none"
                       />
                     </div>
                   </div>
@@ -654,17 +770,17 @@ export const AccountPage: React.FC = () => {
                       <label className="text-[11px] font-bold text-[#2B1816]">
                         পাসওয়ার্ড <span className="text-[#9E0B16]">*</span>
                       </label>
-                      <button
-                        type="button"
+                      <Link
+                        to="/forgot-password"
                         onClick={() => {
-                          setResetPhone(loginPhone);
+                          setResetIdentifier(loginIdentifier);
                           setIsForgotPassword(true);
                           setFeedback(null);
                         }}
                         className="text-[11px] font-bold text-[#8B0B15] hover:underline cursor-pointer"
                       >
                         পাসওয়ার্ড ভুলে গেছেন?
-                      </button>
+                      </Link>
                     </div>
                     <div className="relative flex items-center rounded-xl border border-[#E2D0B8] focus-within:border-[#6B0812] bg-[#FDFBF7] overflow-hidden transition-colors">
                       <Lock className="w-3.5 h-3.5 text-[#6B0812]/60 ml-3 shrink-0 pointer-events-none" />
@@ -782,11 +898,15 @@ export const AccountPage: React.FC = () => {
                 <Phone className="w-3.5 h-3.5" />
                 {currentUser.phone}
               </span>
-              <span>·</span>
-              <span className="flex items-center gap-1">
-                <Mail className="w-3.5 h-3.5" />
-                {currentUser.email}
-              </span>
+              {currentUser.email && (
+                <>
+                  <span>·</span>
+                  <span className="flex items-center gap-1">
+                    <Mail className="w-3.5 h-3.5" />
+                    {currentUser.email}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -823,6 +943,17 @@ export const AccountPage: React.FC = () => {
               </div>
 
               <div>
+                <label className="block text-[#242424]/70 mb-1">ইমেইল</label>
+                <input
+                  type="email"
+                  value={profileEmail}
+                  onChange={(e) => setProfileEmail(e.target.value)}
+                  placeholder="name@example.com"
+                  className="w-full bg-[#FAF8F4] border border-[#EDE5D9] rounded-md px-3 py-2 text-xs"
+                />
+              </div>
+
+              <div>
                 <label className="block text-[#242424]/70 mb-1">জেলা</label>
                 <input
                   type="text"
@@ -832,12 +963,36 @@ export const AccountPage: React.FC = () => {
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[#242424]/70 mb-1">উপজেলা / থানা</label>
+                  <input
+                    type="text"
+                    value={upazila}
+                    onChange={(e) => setUpazila(e.target.value)}
+                    placeholder="যেমন: ধানমন্ডি"
+                    className="w-full bg-[#FAF8F4] border border-[#EDE5D9] rounded-md px-3 py-2 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[#242424]/70 mb-1">এলাকা / রোড</label>
+                  <input
+                    type="text"
+                    value={area}
+                    onChange={(e) => setArea(e.target.value)}
+                    placeholder="যেমন: রোড ৮"
+                    className="w-full bg-[#FAF8F4] border border-[#EDE5D9] rounded-md px-3 py-2 text-xs"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block text-[#242424]/70 mb-1">সম্পূর্ণ ঠিকানা</label>
                 <textarea
                   rows={3}
                   value={fullAddress}
                   onChange={(e) => setFullAddress(e.target.value)}
+                  placeholder="বাড়ি/ফ্ল্যাট নং, রোড, এলাকা লিখুন"
                   className="w-full bg-[#FAF8F4] border border-[#EDE5D9] rounded-md p-2.5 text-xs"
                 />
               </div>

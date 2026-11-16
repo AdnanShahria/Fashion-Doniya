@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router';
 import { useStore } from '../context/StoreContext';
 import { FabricPatternVisual } from '../components/common/FabricPatternVisual';
 import { getUniqueProductFabricImage } from '../components/home/allProductsImageGenerator';
@@ -172,12 +173,14 @@ export const CartPage: React.FC = () => {
                     )}
                   </div>
 
-                  <h3 
-                    onClick={() => navigateTo('product-details', { productId: item.productId })}
-                    className="text-base font-bold text-[#242424] hover:text-[#C5A46D] cursor-pointer"
+                  <Link
+                    to={`/product/${encodeURIComponent(item.product.slug || item.productId)}`}
+                    className="block"
                   >
-                    {item.product.name} {item.outfitCategory ? `(${item.outfitCategory})` : ''}
-                  </h3>
+                    <h3 className="text-base font-bold text-[#242424] hover:text-[#C5A46D] cursor-pointer">
+                      {item.product.name} {item.outfitCategory ? `(${item.outfitCategory})` : ''}
+                    </h3>
+                  </Link>
 
                   <div className="text-xs text-[#242424]/60 flex flex-wrap items-center justify-center sm:justify-start gap-x-3 gap-y-1">
                     <span>
@@ -211,6 +214,22 @@ export const CartPage: React.FC = () => {
                           <strong>নোট:</strong> {item.customizationNotes}
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {item.selectedAddons && item.selectedAddons.length > 0 && (
+                    <div className="mt-2 flex flex-wrap items-center justify-center sm:justify-start gap-1.5">
+                      {item.selectedAddons.map((addon, idx) => (
+                        <span
+                          key={`${addon.addonId}-${addon.fabricId}-${idx}`}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#FAF8F4] border border-[#EDE5D9] rounded-md text-[11px] text-[#242424]/80"
+                        >
+                          <span className="font-semibold text-[#850B1B]">{addon.addonName}</span>
+                          <span>· {addon.fabricName}</span>
+                          <span>×{addon.count}</span>
+                          <span className="font-bold text-[#242424] tabular-nums">৳{addon.totalAddonPrice}</span>
+                        </span>
+                      ))}
                     </div>
                   )}
                 </div>

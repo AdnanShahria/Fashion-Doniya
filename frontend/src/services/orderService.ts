@@ -391,6 +391,39 @@ export const orderService = {
     return newOrder;
   },
 
+  async createOrderAsync(
+    orderData: Omit<Order, 'id' | 'orderNumber' | 'createdAt' | 'statusHistory'>
+  ): Promise<Order> {
+    try {
+      const res = await api.post<{ success: boolean; order?: Order; message?: string }>(
+        '/orders',
+        orderData
+      );
+      if (res.data?.success && res.data.order) {
+        saveServerOrderSnapshotToLocal(res.data.order);
+        notifyLocalOrderSubscribers(res.data.order);
+        return res.data.order;
+      }
+      if (res.data && res.data.success === false) {
+        throw new Error(
+          res.data.message || 'অর্ডার সম্পন্ন করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।'
+        );
+      }
+    } catch (err: unknown) {
+      const errObj = err as { response?: { status?: number; data?: { message?: string } } };
+      if (errObj?.response?.status) {
+        throw new Error(
+          errObj.response.data?.message ||
+            'অর্ডার সম্পন্ন করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।'
+        );
+      }
+      if (err instanceof Error && !('isAxiosError' in err)) {
+        throw err;
+      }
+    }
+    return this.createOrder(orderData);
+  },
+
   // Update Order Status + Create timestamped order_tracking_history record
   updateOrderStatus(
     orderId: string,

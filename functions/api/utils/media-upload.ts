@@ -1,5 +1,6 @@
 import type { Context } from 'hono';
 import type { AppEnv, Bindings } from '../types';
+import { slugify } from './helpers';
 
 export type MediaStorageProvider = 'r2' | 'imgbb' | 'inline-dev';
 
@@ -48,19 +49,29 @@ export function createSyntheticTestPng(): Uint8Array {
   return base64ToUint8Array(base64Png);
 }
 
+function toSeoFileNameBase(rawInput: string): string {
+  return (
+    slugify(rawInput)
+      .replace(/[^a-zA-Z0-9_-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || 'fabric-image'
+  );
+}
+
 export async function parseImageUploadRequest(
   c: Context<AppEnv>
 ): Promise<ParsedImagePayload | null> {
   let bytes: Uint8Array | null = null;
   let contentType = 'image/png';
   let ext = 'png';
-  let fileNameBase = 'image';
+  let fileNameBase = 'fabric-image';
   let rawDataUrl = '';
 
   const reqContentType = (c.req.header('content-type') || '').toLowerCase();
   if (reqContentType.includes('multipart/form-data')) {
     const form = await c.req.formData().catch(() => null);
     const file = form?.get('file') || form?.get('image');
+    const nameHint = String(form?.get('nameHint') || '').trim();
     if (file && typeof file === 'object' && 'arrayBuffer' in file) {
       const f = file as File;
       bytes = new Uint8Array(await f.arrayBuffer());
@@ -75,17 +86,20 @@ export async function parseImageUploadRequest(
               : contentType.includes('svg')
                 ? 'svg'
                 : 'png';
-      fileNameBase = (f.name || 'upload')
-        .replace(/\.[^.]+$/, '')
-        .replace(/[^a-zA-Z0-9_-]/g, '_');
+      const rawName = (f.name || 'fabric-image').replace(/\.[^.]+$/, '');
+      fileNameBase = toSeoFileNameBase(nameHint || rawName);
     }
   } else {
     const body = (await c.req.json().catch(() => ({}))) as {
       dataUrl?: string;
       fileName?: string;
+      nameHint?: string;
     };
     rawDataUrl = String(body?.dataUrl || '').trim();
-    fileNameBase = String(body?.fileName || 'image').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const rawName = String(body?.nameHint || body?.fileName || 'fabric-image')
+      .replace(/\.[^.]+$/, '')
+      .trim();
+    fileNameBase = toSeoFileNameBase(rawName);
     const match = rawDataUrl.match(/^data:image\/(png|jpeg|jpg|webp|gif|svg\+xml);base64,(.+)$/i);
     if (match) {
       const rawSubtype = match[1].toLowerCase();
@@ -103,7 +117,7 @@ export async function parseImageUploadRequest(
     bytes,
     contentType,
     ext,
-    fileNameBase: fileNameBase || 'image',
+    fileNameBase: fileNameBase || 'fabric-image',
     rawDataUrl,
   };
 }
@@ -120,12 +134,15 @@ export async function storeImageBytes(
   options?: { verifyR2Readback?: boolean }
 ): Promise<StoredMediaResult> {
   const startedAt = Date.now();
-  const objectKey = `uploads/${payload.fileNameBase}_${Date.now()}.${payload.ext}`;
+  const objectKey = `uploads/${payload.fileNameBase}-${Date.now()}.${payload.ext}`;
 
   // 1. Primary: Cloudflare R2
   if (env?.MEDIA_BUCKET) {
     await env.MEDIA_BUCKET.put(objectKey, payload.bytes, {
-      httpMetadata: { contentType: payload.contentType },
+      httpMetadata: {
+        contentType: payload.contentType,
+        cacheControl: 'public, max-age=31536000, immutable',
+      },
     });
 
     let verifiedReadback: boolean | undefined;

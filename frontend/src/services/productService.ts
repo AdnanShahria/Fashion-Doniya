@@ -47,7 +47,7 @@ export const productService = {
     return this.getActiveProducts().filter(p => p.isNewArrival);
   },
 
-  saveProduct(product: Product): Product {
+  upsertLocalProduct(product: Product): Product[] {
     const products = this.getAllProducts();
     const index = products.findIndex(p => p.id === product.id);
     if (index >= 0) {
@@ -56,23 +56,72 @@ export const productService = {
       products.unshift(product);
     }
     StorageService.setProducts(products);
+    return products;
+  },
 
-    api.post('/admin/products', { product }).catch(() => {});
+  saveProduct(product: Product): Product {
+    this.upsertLocalProduct(product);
+
+    api
+      .post<{ success?: boolean; product?: Product; products?: Product[] }>('/admin/products', { product })
+      .then((res) => {
+        if (res.data?.success) {
+          if (Array.isArray(res.data.products)) {
+            StorageService.setProducts(res.data.products);
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('products-updated'));
+            }
+          } else if (res.data.product) {
+            this.upsertLocalProduct(res.data.product);
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('products-updated'));
+            }
+          }
+        }
+      })
+      .catch(() => {});
 
     return product;
   },
 
   async saveProductAsync(product: Product): Promise<Product> {
-    this.saveProduct(product);
     try {
-      const res = await api.post<{ success: boolean; product?: Product }>('/admin/products', { product });
-      if (res.data?.success && res.data.product) {
-        return res.data.product;
+      const res = await api.post<{
+        success: boolean;
+        product?: Product;
+        products?: Product[];
+        message?: string;
+      }>('/admin/products', { product });
+      if (res.data?.success) {
+        if (Array.isArray(res.data.products)) {
+          StorageService.setProducts(res.data.products);
+        } else if (res.data.product) {
+          this.upsertLocalProduct(res.data.product);
+        } else {
+          this.upsertLocalProduct(product);
+        }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('products-updated'));
+        }
+        return res.data.product || product;
       }
-    } catch {
-      // Handled locally
+      if (res.data?.message) {
+        throw new Error(res.data.message);
+      }
+    } catch (err: unknown) {
+      const errObj = err as { response?: { status?: number; data?: { message?: string } } };
+      if (
+        errObj?.response?.status &&
+        errObj.response.status >= 400 &&
+        errObj.response.data?.message
+      ) {
+        throw new Error(errObj.response.data.message);
+      }
+      if (err instanceof Error && !errObj?.response && !('isAxiosError' in err)) {
+        throw err;
+      }
     }
-    return product;
+    return this.saveProduct(product);
   },
 
   deleteProduct(id: string): boolean {

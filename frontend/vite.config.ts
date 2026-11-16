@@ -33,6 +33,18 @@ export default defineConfig({
         target: 'http://127.0.0.1:9998',
         changeOrigin: true,
       },
+      '/robots.txt': {
+        target: 'http://127.0.0.1:9998',
+        changeOrigin: true,
+      },
+      '/llms.txt': {
+        target: 'http://127.0.0.1:9998',
+        changeOrigin: true,
+      },
+      '/llms-full.txt': {
+        target: 'http://127.0.0.1:9998',
+        changeOrigin: true,
+      },
     },
   },
   build: {

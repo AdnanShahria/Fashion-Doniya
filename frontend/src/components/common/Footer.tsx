@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router';
 import { useStore } from '../../context/StoreContext';
-import { StorageService } from '../../services/storageService';
 import { api } from '../../services/api';
 import { 
   Phone, 
@@ -11,7 +11,6 @@ import {
   Truck, 
   Headphones,
   Send,
-  RefreshCw,
   Facebook,
   Instagram,
   Youtube,
@@ -19,14 +18,14 @@ import {
 } from 'lucide-react';
 
 export const Footer: React.FC = () => {
-  const { settings, navigateTo, showToast, refreshData } = useStore();
+  const { settings, showToast } = useStore();
   const [newsletterEmail, setNewsletterEmail] = useState('');
 
-  const handleResetData = () => {
-    StorageService.resetDemoData();
-    refreshData();
-    showToast('ডেমো ডাটা সফলভাবে রিসেট করা হয়েছে!', 'success');
-    navigateTo('home');
+  const resolveFooterHref = (pageKey: string): string => {
+    if (pageKey === 'home') return '/';
+    if (pageKey === 'shop-3-5') return '/fabric/3.5-bahar';
+    if (pageKey === 'shop-2-5') return '/fabric/2.5-bahar';
+    return `/${pageKey}`;
   };
 
   const handleSubscribe = async (e: React.FormEvent) => {
@@ -45,16 +44,6 @@ export const Footer: React.FC = () => {
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
         'সাবস্ক্রাইব করতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।';
       showToast(msg, 'error');
-    }
-  };
-
-  const handleNavAction = (pageKey: string) => {
-    if (pageKey === 'shop-3-5') {
-      navigateTo('fabric-width', { width: '3.5' });
-    } else if (pageKey === 'shop-2-5') {
-      navigateTo('fabric-width', { width: '2.5' });
-    } else {
-      navigateTo(pageKey as any);
     }
   };
 
@@ -213,50 +202,50 @@ export const Footer: React.FC = () => {
               {activeFabricNavItems.length > 0 ? (
                 activeFabricNavItems.map((item) => (
                   <li key={item.id}>
-                    <button
-                      onClick={() => handleNavAction(item.page)}
+                    <Link
+                      to={resolveFooterHref(item.page)}
                       className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer"
                     >
                       {item.label}
-                    </button>
+                    </Link>
                   </li>
                 ))
               ) : (
                 <>
                   <li>
-                    <button onClick={() => navigateTo('fabric-width', { width: '3.5' })} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                    <Link to="/fabric/3.5-bahar" className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
                       ৩.৫ বহর কাপড় (৫৬–৬০ ইঞ্চি)
-                    </button>
+                    </Link>
                   </li>
                   <li>
-                    <button onClick={() => navigateTo('fabric-width', { width: '2.5' })} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                    <Link to="/fabric/2.5-bahar" className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
                       ২.৫ বহর কাপড় (৪২–৪৪ ইঞ্চি)
-                    </button>
+                    </Link>
                   </li>
                   <li>
-                    <button onClick={() => navigateTo('category-gallery', { width: '3.5', category: 'saree' })} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                    <Link to="/fabric/3.5-bahar/saree" className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
                       শাড়ির কাপড় কালেকশন
-                    </button>
+                    </Link>
                   </li>
                   <li>
-                    <button onClick={() => navigateTo('category-gallery', { width: '3.5', category: 'kamiz' })} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                    <Link to="/fabric/3.5-bahar/kamiz" className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
                       কামিজ ও কুর্তি ফেব্রিক
-                    </button>
+                    </Link>
                   </li>
                   <li>
-                    <button onClick={() => navigateTo('shop')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                    <Link to="/shop" className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
                       সকল প্রিমিয়াম থান কাপড়
-                    </button>
+                    </Link>
                   </li>
                   <li>
-                    <button onClick={() => navigateTo('calculator')} className="text-left hover:text-[#D5A64A] text-[#D5A64A] font-semibold transition-colors cursor-pointer">
+                    <Link to="/calculator" className="text-left hover:text-[#D5A64A] text-[#D5A64A] font-semibold transition-colors cursor-pointer">
                       স্বয়ংক্রিয় গজ ক্যালকুলেটর →
-                    </button>
+                    </Link>
                   </li>
                   <li>
-                    <button onClick={() => navigateTo('custom-design')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                    <Link to="/custom-design" className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
                       কাস্টম ডিজাইন ও সাইজিং
-                    </button>
+                    </Link>
                   </li>
                 </>
               )}
@@ -272,50 +261,50 @@ export const Footer: React.FC = () => {
               {activeSupportNavItems.length > 0 ? (
                 activeSupportNavItems.map((item) => (
                   <li key={item.id}>
-                    <button
-                      onClick={() => handleNavAction(item.page)}
+                    <Link
+                      to={resolveFooterHref(item.page)}
                       className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer"
                     >
                       {item.label}
-                    </button>
+                    </Link>
                   </li>
                 ))
               ) : (
                 <>
                   <li>
-                    <button onClick={() => navigateTo('order-tracking')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                    <Link to="/order-tracking" className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
                       অর্ডার ট্র্যাকিং করুন
-                    </button>
+                    </Link>
                   </li>
                   <li>
-                    <button onClick={() => navigateTo('measurement-guide')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                    <Link to="/measurement-guide" className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
                       কাপড়ের বহর ও মাপের গাইড
-                    </button>
+                    </Link>
                   </li>
                   <li>
-                    <button onClick={() => navigateTo('faq')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                    <Link to="/faq" className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
                       সাধারণ জিজ্ঞাসা (FAQ)
-                    </button>
+                    </Link>
                   </li>
                   <li>
-                    <button onClick={() => navigateTo('delivery-policy')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                    <Link to="/delivery-policy" className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
                       ডেলিভারি পলিসি ও সময়সীমা
-                    </button>
+                    </Link>
                   </li>
                   <li>
-                    <button onClick={() => navigateTo('return-policy')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                    <Link to="/return-policy" className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
                       রিটার্ন ও রিফান্ড নীতি
-                    </button>
+                    </Link>
                   </li>
                   <li>
-                    <button onClick={() => navigateTo('terms')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                    <Link to="/terms" className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
                       শর্তাবলী ও নিয়মাবলী
-                    </button>
+                    </Link>
                   </li>
                   <li>
-                    <button onClick={() => navigateTo('privacy-policy')} className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
+                    <Link to="/privacy-policy" className="text-left hover:text-[#D5A64A] transition-colors cursor-pointer">
                       গোপনীয়তা রক্ষা নীতি
-                    </button>
+                    </Link>
                   </li>
                 </>
               )}
@@ -352,31 +341,20 @@ export const Footer: React.FC = () => {
 
             <div className="pt-2 border-t border-[#3D1418]/60 space-y-2">
               <div className="flex items-center gap-3 text-xs text-[#EDE5D9]/85">
-                <button onClick={() => navigateTo('about')} className="hover:text-[#D5A64A] transition-colors cursor-pointer">
+                <Link to="/about" className="hover:text-[#D5A64A] transition-colors cursor-pointer">
                   আমাদের সম্পর্কে
-                </button>
+                </Link>
                 <span>·</span>
-                <button onClick={() => navigateTo('contact')} className="hover:text-[#D5A64A] transition-colors cursor-pointer">
+                <Link to="/contact" className="hover:text-[#D5A64A] transition-colors cursor-pointer">
                   যোগাযোগ
-                </button>
+                </Link>
                 <span>·</span>
-                <button 
-                  onClick={() => navigateTo('admin')} 
+                <Link
+                  to="/admin"
                   className="hover:text-[#D5A64A] transition-colors cursor-pointer text-[#E5C687]"
                 >
                   অ্যাডমিন প্যানেল
-                </button>
-              </div>
-
-              <div>
-                <button 
-                  onClick={handleResetData}
-                  className="text-xs text-[#EDE5D9]/75 hover:text-red-300 transition-colors flex items-center gap-1 cursor-pointer"
-                  title="রিসেট করে প্রাথমিক স্যাম্পল ডাটায় ফেরত যান"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                  <span>ডেমো ডাটা রিসেট করুন</span>
-                </button>
+                </Link>
               </div>
             </div>
           </div>

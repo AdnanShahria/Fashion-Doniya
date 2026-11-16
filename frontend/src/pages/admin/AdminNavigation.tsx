@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { settingsService } from '../../services/settingsService';
 import { NavigationConfig, NavigationMenuItem, PageRoute } from '../../types';
@@ -37,16 +37,29 @@ const AVAILABLE_PAGES: { route: PageRoute; label: string }[] = [
 export const AdminNavigation: React.FC = () => {
   const { settings, refreshData, showToast } = useStore();
 
-  const [navConfig, setNavConfig] = useState<NavigationConfig>(() => {
+  const hasEditedRef = useRef(false);
+
+  const [navConfig, setNavConfigRaw] = useState<NavigationConfig>(() => {
     const existing = settings.navigationConfig || INITIAL_NAVIGATION_CONFIG;
     return JSON.parse(JSON.stringify(existing));
   });
+  const setNavConfig: React.Dispatch<React.SetStateAction<NavigationConfig>> = (val) => {
+    hasEditedRef.current = true;
+    setNavConfigRaw(val);
+  };
+
+  useEffect(() => {
+    if (!hasEditedRef.current && settings.navigationConfig) {
+      setNavConfigRaw(JSON.parse(JSON.stringify(settings.navigationConfig)));
+    }
+  }, [settings.navigationConfig]);
 
   const [activeMenu, setActiveMenu] = useState<
     'headerItems' | 'footerFabricItems' | 'footerSupportItems' | 'floatingWidget'
   >('headerItems');
 
   const handleSaveNavigation = () => {
+    hasEditedRef.current = false;
     // Prefix header item IDs with 'custom-nav-' so Header.tsx knows Admin customized the navigation
     const updatedNav: NavigationConfig = {
       ...navConfig,

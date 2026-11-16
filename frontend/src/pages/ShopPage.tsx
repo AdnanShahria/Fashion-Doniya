@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { Link } from 'react-router';
 import { useStore } from '../context/StoreContext';
 import { ProductCard } from '../components/common/ProductCard';
 import { FabricWidth, Product } from '../types';
@@ -422,19 +423,20 @@ export const ShopPage: React.FC = () => {
                 const isWishlisted = isInWishlist(product.id);
                 const listImage = getUniqueProductFabricImage(product);
                 const isOutOfStock = product.stockYards <= 0;
+                const productHref = `/product/${encodeURIComponent(product.slug || product.id)}`;
                 return (
                   <div
                     key={product.id}
                     className="p-5 bg-white rounded-xl border border-[#EDE5D9] hover:border-[#C5A46D] transition-all flex flex-col sm:flex-row items-center gap-6"
                   >
-                    <div 
-                      onClick={() => navigateTo('product-details', { productId: product.id })}
-                      className="w-full sm:w-44 aspect-[4/3] shrink-0 rounded-lg overflow-hidden border border-[#EDE5D9] cursor-pointer bg-[#FAF6F0]"
+                    <Link
+                      to={productHref}
+                      className="w-full sm:w-44 aspect-[4/3] shrink-0 rounded-lg overflow-hidden border border-[#EDE5D9] cursor-pointer bg-[#FAF6F0] block"
                     >
                       {listImage ? (
                         <img
                           src={listImage}
-                          alt={product.name}
+                          alt={product.imageAlt || product.name}
                           referrerPolicy="no-referrer"
                           className="w-full h-full object-cover"
                         />
@@ -448,7 +450,7 @@ export const ShopPage: React.FC = () => {
                           aspectRatio="square"
                         />
                       )}
-                    </div>
+                    </Link>
 
                     <div className="flex-1 space-y-1.5 text-left w-full">
                       <div className="flex items-center gap-2 text-xs text-[#242424]/60">
@@ -459,12 +461,11 @@ export const ShopPage: React.FC = () => {
                         <span>{product.fabricType}</span>
                       </div>
 
-                      <h3
-                        onClick={() => navigateTo('product-details', { productId: product.id })}
-                        className="text-base font-bold text-[#242424] hover:text-[#C5A46D] cursor-pointer"
-                      >
-                        {product.name}
-                      </h3>
+                      <Link to={productHref} className="block">
+                        <h3 className="text-base font-bold text-[#242424] hover:text-[#C5A46D] cursor-pointer">
+                          {product.name}
+                        </h3>
+                      </Link>
 
                       <p className="text-xs text-[#242424]/70 line-clamp-2">
                         {product.description}

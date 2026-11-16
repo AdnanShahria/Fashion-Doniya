@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { settingsService } from '../../services/settingsService';
 import { productService } from '../../services/productService';
@@ -32,20 +32,37 @@ import {
 export const AdminHomepage: React.FC = () => {
   const { settings, products, refreshData, showToast } = useStore();
 
-  const [homepageConfig, setHomepageConfig] = useState<HomepageConfig>(() => {
-    const existing = settings.homepageConfig || INITIAL_HOMEPAGE_CONFIG;
+  const hasEditedRef = useRef(false);
+
+  const cloneHomepageConfig = (raw?: HomepageConfig): HomepageConfig => {
+    const existing = raw || INITIAL_HOMEPAGE_CONFIG;
     const clone: HomepageConfig = JSON.parse(JSON.stringify(existing));
     if (!clone.fabricWidthCards || clone.fabricWidthCards.length === 0) {
       clone.fabricWidthCards = JSON.parse(JSON.stringify(INITIAL_FABRIC_WIDTH_CARDS));
     }
     return clone;
-  });
+  };
+
+  const [homepageConfig, setHomepageConfigRaw] = useState<HomepageConfig>(() =>
+    cloneHomepageConfig(settings.homepageConfig)
+  );
+  const setHomepageConfig: React.Dispatch<React.SetStateAction<HomepageConfig>> = (val) => {
+    hasEditedRef.current = true;
+    setHomepageConfigRaw(val);
+  };
+
+  useEffect(() => {
+    if (!hasEditedRef.current && settings.homepageConfig) {
+      setHomepageConfigRaw(cloneHomepageConfig(settings.homepageConfig));
+    }
+  }, [settings.homepageConfig]);
 
   const [activeSubTab, setActiveSubTab] = useState<
     'hero' | 'fabric-width' | 'sections' | 'banners' | 'curated-products'
   >('hero');
 
   const handleSaveHomepageConfig = () => {
+    hasEditedRef.current = false;
     const firstSlide = homepageConfig.heroSlides[0];
     settingsService.updateSettings({
       homepageConfig,

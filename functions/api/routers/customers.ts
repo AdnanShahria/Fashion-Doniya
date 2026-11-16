@@ -10,14 +10,38 @@ export const customersRouter = new Hono<AppEnv>();
 export const adminCustomersRouter = new Hono<AppEnv>();
 
 function mapCustomerRow(row: typeof users.$inferSelect): CustomerUser {
+  const rawSaved = safeJsonParse<Record<string, unknown> | undefined>(
+    row.savedMeasurements,
+    undefined
+  );
+  let altPhone: string | undefined;
+  let notes: string | undefined;
+  let cleanMeasurements: CustomerUser['savedMeasurements'] | undefined;
+
+  if (rawSaved && typeof rawSaved === 'object') {
+    const meta = rawSaved.__meta as { altPhone?: unknown; notes?: unknown } | undefined;
+    if (meta && typeof meta === 'object') {
+      if (meta.altPhone) altPhone = String(meta.altPhone);
+      if (meta.notes) notes = String(meta.notes);
+    }
+    const { __meta: _ignored, ...rest } = rawSaved;
+    if (Object.keys(rest).length > 0) {
+      cleanMeasurements = rest as CustomerUser['savedMeasurements'];
+    }
+  }
+
   return {
     id: row.id,
     fullName: row.fullName,
     phone: row.phone,
+    altPhone,
     email: row.email || undefined,
     district: row.district || undefined,
     upazila: row.upazila || undefined,
     fullAddress: row.fullAddress || undefined,
+    notes,
+    totalOrders: Number(row.totalOrders ?? 0),
+    totalSpent: Number(row.totalSpent ?? 0),
     address:
       row.district || row.upazila || row.area || row.fullAddress
         ? {
@@ -27,48 +51,103 @@ function mapCustomerRow(row: typeof users.$inferSelect): CustomerUser {
             fullAddress: row.fullAddress || '',
           }
         : undefined,
-    savedMeasurements: safeJsonParse(row.savedMeasurements, undefined),
+    savedMeasurements: cleanMeasurements,
     status: (row.status as 'active' | 'blocked') || 'active',
     createdAt: row.createdAt,
   };
 }
 
+function buildSavedMeasurementsJson(
+  existingRaw: string | null | undefined,
+  updates: Partial<CustomerUser>
+): string | null {
+  const existingParsed = safeJsonParse<Record<string, unknown>>(existingRaw, {});
+  const { __meta: existingMetaRaw, ...existingMeasurements } = existingParsed;
+  const existingMeta =
+    existingMetaRaw && typeof existingMetaRaw === 'object'
+      ? (existingMetaRaw as Record<string, unknown>)
+      : {};
+
+  const nextMeasurements = updates.savedMeasurements
+    ? { ...(updates.savedMeasurements as Record<string, unknown>) }
+    : existingMeasurements;
+
+  const nextMeta: Record<string, unknown> = { ...existingMeta };
+  if (updates.altPhone !== undefined) {
+    if (updates.altPhone) nextMeta.altPhone = updates.altPhone;
+    else delete nextMeta.altPhone;
+  }
+  if (updates.notes !== undefined) {
+    if (updates.notes) nextMeta.notes = updates.notes;
+    else delete nextMeta.notes;
+  }
+
+  const payload: Record<string, unknown> = { ...nextMeasurements };
+  if (Object.keys(nextMeta).length > 0) {
+    payload.__meta = nextMeta;
+  }
+  return Object.keys(payload).length > 0 ? JSON.stringify(payload) : null;
+}
+
 customersRouter.post('/sync', async (c) => {
+  const authUser = c.get('user');
+  const isAdmin = c.get('isAdmin');
+  if (!authUser && !isAdmin) {
+    return c.json(
+      { success: false, code: 'AUTH_REQUIRED', message: 'অনুগ্রহ করে প্রথমে লগইন করুন।' },
+      401
+    );
+  }
+
   const body = (await c.req.json().catch(() => ({}))) as { user?: CustomerUser };
   const user = body?.user;
   if (!user || !user.phone) {
     return c.json({ success: false, message: 'গ্রাহকের মোবাইল নম্বর আবশ্যক।' }, 400);
   }
 
+  if (!isAdmin && user.id && user.id !== authUser!.id) {
+    return c.json(
+      { success: false, message: 'অন্য গ্রাহকের তথ্য পরিবর্তন করা অনুমোদিত নয়।' },
+      403
+    );
+  }
+
   const db = c.get('db');
   const normPhone = normalizePhone(user.phone);
   const allRows = await db.select().from(users);
-  const existing = allRows.find((u) => normalizePhone(u.phone) === normPhone || u.id === user.id);
+
+  const existing = !isAdmin
+    ? allRows.find((u) => u.id === authUser!.id) ||
+      (authUser!.phone
+        ? allRows.find((u) => normalizePhone(u.phone) === normalizePhone(authUser!.phone))
+        : undefined)
+    : allRows.find((u) => normalizePhone(u.phone) === normPhone || u.id === user.id);
+
+  if (!isAdmin && existing && existing.id !== authUser!.id) {
+    return c.json(
+      { success: false, message: 'অন্য গ্রাহকের তথ্য পরিবর্তন করা অনুমোদিত নয়।' },
+      403
+    );
+  }
+
+  if (!isAdmin) {
+    const ownerId = existing?.id || authUser!.id;
+    const phoneConflict = allRows.find(
+      (u) => normalizePhone(u.phone) === normPhone && u.id !== ownerId
+    );
+    if (phoneConflict) {
+      return c.json(
+        { success: false, message: 'অন্য গ্রাহকের তথ্য পরিবর্তন করা অনুমোদিত নয়।' },
+        403
+      );
+    }
+  }
 
   if (existing && existing.status === 'blocked') {
     return c.json(
       { success: false, code: 'ACCOUNT_BLOCKED', message: 'আপনার অ্যাকাউন্টটি ব্লক করা হয়েছে।' },
       403
     );
-  }
-
-  // Security Hardening (BOLA Guard): If account has a password, verify ownership or admin rights
-  const authUser = c.get('user');
-  const isAdmin = c.get('isAdmin');
-  if (existing && existing.passwordHash) {
-    const isOwner =
-      authUser &&
-      (authUser.id === existing.id || normalizePhone(authUser.phone) === normPhone);
-    if (!isOwner && !isAdmin) {
-      return c.json(
-        {
-          success: false,
-          code: 'AUTH_REQUIRED',
-          message: 'এই অ্যাকাউন্টের তথ্য পরিবর্তন করতে অনুগ্রহ করে প্রথমে পাসওয়ার্ড দিয়ে লগইন করুন।',
-        },
-        401
-      );
-    }
   }
 
   const now = new Date().toISOString();
@@ -83,9 +162,9 @@ customersRouter.post('/sync', async (c) => {
         upazila: user.upazila ?? user.address?.upazila ?? existing.upazila,
         area: user.address?.area ?? existing.area,
         fullAddress: user.fullAddress ?? user.address?.fullAddress ?? existing.fullAddress,
-        savedMeasurements: user.savedMeasurements
-          ? JSON.stringify(user.savedMeasurements)
-          : existing.savedMeasurements,
+        savedMeasurements: buildSavedMeasurementsJson(existing.savedMeasurements, {
+          savedMeasurements: user.savedMeasurements,
+        }),
         updatedAt: now,
       })
       .where(eq(users.id, existing.id));
@@ -94,7 +173,7 @@ customersRouter.post('/sync', async (c) => {
     return c.json({ success: true, customer: updated ? mapCustomerRow(updated) : user });
   }
 
-  const newId = user.id || `cust-${Date.now()}`;
+  const newId = (!isAdmin ? authUser!.id : user.id) || `cust-${Date.now()}`;
   await db.insert(users).values({
     id: newId,
     fullName: user.fullName || 'Customer',
@@ -145,9 +224,7 @@ async function upsertAdminCustomer(
         area: updates.address?.area !== undefined ? updates.address.area : existing.area,
         fullAddress: updates.fullAddress !== undefined ? updates.fullAddress : existing.fullAddress,
         status: updates.status === 'blocked' ? 'blocked' : updates.status === 'active' ? 'active' : existing.status,
-        savedMeasurements: updates.savedMeasurements
-          ? JSON.stringify(updates.savedMeasurements)
-          : existing.savedMeasurements,
+        savedMeasurements: buildSavedMeasurementsJson(existing.savedMeasurements, updates),
         updatedAt: now,
       })
       .where(eq(users.id, existing.id));
@@ -173,7 +250,7 @@ async function upsertAdminCustomer(
     upazila: updates.upazila || updates.address?.upazila || null,
     area: updates.address?.area || null,
     fullAddress: updates.fullAddress || updates.address?.fullAddress || null,
-    savedMeasurements: updates.savedMeasurements ? JSON.stringify(updates.savedMeasurements) : null,
+    savedMeasurements: buildSavedMeasurementsJson(null, updates),
     createdAt: updates.createdAt || now,
     updatedAt: now,
   });

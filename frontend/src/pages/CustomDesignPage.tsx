@@ -1,11 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../context/StoreContext';
 import { getUniqueProductFabricImage } from '../components/home/allProductsImageGenerator';
-import { measurementService } from '../services/measurementService';
+import { measurementService, CUSTOM_MEASUREMENT_FIELDS } from '../services/measurementService';
 import {
   ProductCustomizationPayload,
   AddonFabricOption,
-  SelectedAddonDetail
+  SelectedAddonDetail,
+  CustomMeasurementFieldKey,
+  CustomerCustomMeasurements
 } from '../types';
 import {
   PRODUCT_OUTFIT_OPTIONS,
@@ -140,6 +142,18 @@ export const CustomDesignPage: React.FC = () => {
   const [sizeMode, setSizeMode] = useState<'standard' | 'custom'>('custom');
   const [standardQuantity, setStandardQuantity] = useState<number>(1);
   const [yards, setYards] = useState<number>(2.5);
+  const [customMeasurements, setCustomMeasurements] = useState<CustomerCustomMeasurements>({
+    chest: '',
+    waist: '',
+    hip: '',
+    length: '',
+    sleeve: '',
+    shoulder: ''
+  });
+  const [measurementErrors, setMeasurementErrors] = useState<
+    Partial<Record<CustomMeasurementFieldKey, string>>
+  >({});
+  const [customizationNotes, setCustomizationNotes] = useState<string>('');
   const [additionalItemCounts, setAdditionalItemCounts] = useState<Record<string, number>>({});
   const [activeCollectionModalAddonId, setActiveCollectionModalAddonId] = useState<string | null>(
     null
@@ -329,6 +343,44 @@ export const CustomDesignPage: React.FC = () => {
     setYards(clamped);
   };
 
+  const applicableMeasurementFields = CUSTOM_MEASUREMENT_FIELDS.filter((field) =>
+    customConfig.applicableFields.includes(field.key)
+  );
+
+  const handleMeasurementInput = (key: CustomMeasurementFieldKey, rawValue: string) => {
+    setCustomMeasurements((prev) => ({
+      ...prev,
+      [key]: rawValue
+    }));
+
+    const trimmed = rawValue.trim();
+    if (!trimmed) {
+      setMeasurementErrors((prev) => {
+        if (!prev[key]) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      return;
+    }
+
+    const asciiVal = trimmed.replace(/[০-৯]/g, (ch) => String('০১২৩৪৫৬৭৮৯'.indexOf(ch)));
+    const num = Number(asciiVal);
+    if (!/^\d+(\.\d{1,2})?$/.test(asciiVal) || Number.isNaN(num) || num <= 0 || num > 120) {
+      setMeasurementErrors((prev) => ({
+        ...prev,
+        [key]: 'সঠিক ইঞ্চি মাপ দিন (১–১২০)'
+      }));
+    } else {
+      setMeasurementErrors((prev) => {
+        if (!prev[key]) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
+  };
+
   const handleAdditionalItemToggle = (itemId: string, delta: number) => {
     setAdditionalItemCounts((prev) => {
       const current = prev[itemId] || 0;
@@ -356,6 +408,17 @@ export const CustomDesignPage: React.FC = () => {
   };
 
   const buildCustomizationPayload = (): ProductCustomizationPayload => {
+    const cleanedMeasurements: CustomerCustomMeasurements = {};
+    if (sizeMode === 'custom') {
+      for (const field of CUSTOM_MEASUREMENT_FIELDS) {
+        const val = customMeasurements[field.key]?.trim();
+        if (val) {
+          cleanedMeasurements[field.key] = val;
+        }
+      }
+    }
+    const hasMeasurements = Object.keys(cleanedMeasurements).length > 0;
+
     const selectedAddonsDetails: SelectedAddonDetail[] = ADDITIONAL_CLOTHING_OPTIONS.filter(
       (item) => (additionalItemCounts[item.id] || 0) > 0
     ).map((item) => {
@@ -408,6 +471,8 @@ export const CustomDesignPage: React.FC = () => {
       standardGaj: customConfig.standardGaj,
       customGaj: combinedTotalYards,
       additionalGaj: priceBreakdown.additionalGaj,
+      measurements: sizeMode === 'custom' && hasMeasurements ? cleanedMeasurements : undefined,
+      customizationNotes: customizationNotes.trim() || undefined,
       additionalPricePerYard: priceBreakdown.additionalPricePerYard,
       finalProductPrice: totalPrice,
       outfitCategory: combinedOutfitCategory,
@@ -1023,6 +1088,62 @@ export const CustomDesignPage: React.FC = () => {
                         </div>
                       </div>
                     </div>
+                  </div>
+
+                  {/* 2. Body Measurement Inputs Grid */}
+                  <div className="space-y-2.5 pt-2 border-t border-[#EDE5D9]">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-[#1C1B19] flex items-center gap-1.5">
+                        <Ruler className="w-3.5 h-3.5 text-[#850B1B]" />
+                        <span>আপনার শরীরের মাপ দিন (ইঞ্চিতে, ঐচ্ছিক):</span>
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                      {(applicableMeasurementFields.length > 0
+                        ? applicableMeasurementFields
+                        : CUSTOM_MEASUREMENT_FIELDS
+                      ).map((field) => {
+                        const err = measurementErrors[field.key];
+                        return (
+                          <div key={field.key} className="space-y-1">
+                            <label className="text-[11px] font-semibold text-[#1C1B19]/80 block">
+                              {field.labelBn}
+                            </label>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={customMeasurements[field.key] || ''}
+                              onChange={(e) => handleMeasurementInput(field.key, e.target.value)}
+                              placeholder={field.placeholder}
+                              className={`w-full px-2.5 py-1.5 bg-[#FAF8F4] border rounded-md text-xs text-[#1C1B19] focus:outline-hidden ${
+                                err
+                                  ? 'border-rose-500 bg-rose-50/30'
+                                  : 'border-[#DCD3C2] focus:border-[#850B1B]'
+                              }`}
+                            />
+                            {err && (
+                              <p className="text-[10px] text-rose-600 font-medium leading-tight">
+                                {err}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 3. Customization Notes */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-[#1C1B19]/80 block">
+                      কাস্টমাইজেশন নোট / বিশেষ নির্দেশনা (ঐচ্ছিক):
+                    </label>
+                    <input
+                      type="text"
+                      value={customizationNotes}
+                      onChange={(e) => setCustomizationNotes(e.target.value)}
+                      placeholder="যেমন: লুজ ফিট হবে, হাতায় কুচি বা অন্য কোনো নির্দেশনা..."
+                      className="w-full px-3 py-2 bg-[#FAF8F4] border border-[#DCD3C2] rounded-md text-xs text-[#1C1B19] focus:outline-hidden focus:border-[#850B1B]"
+                    />
                   </div>
               </div>
             )}

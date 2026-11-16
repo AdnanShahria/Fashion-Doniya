@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { settingsService } from '../../services/settingsService';
 import { PromotionCampaign, Coupon } from '../../types';
@@ -8,14 +8,32 @@ import { Tag, Plus, Trash2, Save, Percent } from 'lucide-react';
 export const AdminPromotions: React.FC = () => {
   const { settings, refreshData, showToast } = useStore();
 
-  const [campaigns, setCampaigns] = useState<PromotionCampaign[]>(() => {
+  const hasEditedRef = useRef(false);
+
+  const [campaigns, setCampaignsRaw] = useState<PromotionCampaign[]>(() => {
     const existing = settings.campaigns || INITIAL_CAMPAIGNS;
     return JSON.parse(JSON.stringify(existing));
   });
+  const setCampaigns: React.Dispatch<React.SetStateAction<PromotionCampaign[]>> = (val) => {
+    hasEditedRef.current = true;
+    setCampaignsRaw(val);
+  };
 
-  const [coupons, setCoupons] = useState<Coupon[]>(() => {
+  const [coupons, setCouponsRaw] = useState<Coupon[]>(() => {
     return JSON.parse(JSON.stringify(settings.coupons || []));
   });
+  const setCoupons: React.Dispatch<React.SetStateAction<Coupon[]>> = (val) => {
+    hasEditedRef.current = true;
+    setCouponsRaw(val);
+  };
+
+  useEffect(() => {
+    if (!hasEditedRef.current) {
+      const existingCampaigns = settings.campaigns || INITIAL_CAMPAIGNS;
+      setCampaignsRaw(JSON.parse(JSON.stringify(existingCampaigns)));
+      setCouponsRaw(JSON.parse(JSON.stringify(settings.coupons || [])));
+    }
+  }, [settings.campaigns, settings.coupons]);
 
   const [newCouponCode, setNewCouponCode] = useState('');
   const [newCouponType, setNewCouponType] = useState<'percentage' | 'fixed'>('percentage');
@@ -23,6 +41,7 @@ export const AdminPromotions: React.FC = () => {
   const [newCouponMin, setNewCouponMin] = useState<number>(1000);
 
   const handleSavePromotions = () => {
+    hasEditedRef.current = false;
     settingsService.updateSettings({ campaigns, coupons });
     refreshData();
     showToast('প্রোমোশনাল ক্যাম্পেইন ও কুপন সফলভাবে সংরক্ষিত হয়েছে!', 'success');

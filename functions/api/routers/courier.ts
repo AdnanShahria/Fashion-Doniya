@@ -6,7 +6,9 @@ import type { Order, OrderStatus } from '../../../frontend/src/types/index';
 import { constantTimeEqual } from '../utils/auth-helper';
 import { mapCourierStatusToOrderStatus, safeJsonParse } from '../utils/helpers';
 import { hydrateOrderRow } from '../utils/mappers';
+import { invalidateHomeCache } from '../utils/cache';
 import { clearBulkMicroCache } from './bulk';
+import { reconcileOrderInventory, recalculateCustomerOrderStats } from './orders';
 
 export const courierRouter = new Hono<AppEnv>();
 
@@ -19,14 +21,17 @@ courierRouter.post('/webhook', async (c) => {
       ''
   ).trim();
 
+  const isProd = c.env?.NODE_ENV === 'production';
   const expectedWebhookSecret = String(
-    c.env?.COURIER_WEBHOOK_SECRET || 'fd-courier-webhook-2026'
+    c.env?.COURIER_WEBHOOK_SECRET || (isProd ? '' : 'fd-courier-webhook-2026')
   ).trim();
   const expectedAdminKey = String(c.env?.ADMIN_API_KEY || '').trim();
 
   const authorized =
     c.get('isAdmin') ||
-    (secret && (await constantTimeEqual(secret, expectedWebhookSecret))) ||
+    (secret &&
+      expectedWebhookSecret.length > 0 &&
+      (await constantTimeEqual(secret, expectedWebhookSecret))) ||
     (secret && expectedAdminKey && (await constantTimeEqual(secret, expectedAdminKey)));
 
   if (!authorized) {
@@ -106,6 +111,15 @@ courierRouter.post('/webhook', async (c) => {
     updatedBy: 'Courier API',
   };
   await db.insert(trackings).values(entry);
+  if (mappedStatus !== orderRow.orderStatus) {
+    await reconcileOrderInventory(db, orderRow, orderRow.orderStatus, mappedStatus);
+    await recalculateCustomerOrderStats(
+      db,
+      orderRow.userId,
+      safeJsonParse<{ phone?: string }>(orderRow.customer, { phone: '' }).phone
+    );
+    await invalidateHomeCache(c.env);
+  }
   clearBulkMicroCache();
 
   const updated = await db.select().from(orders).where(eq(orders.id, orderRow.id)).get();
@@ -189,6 +203,11 @@ courierRouter.post('/sync/:id', async (c) => {
       updatedBy: 'Courier API',
     };
     await db.insert(trackings).values(historyEntry);
+    if (nextStatus !== orderRow.orderStatus) {
+      await reconcileOrderInventory(db, orderRow, orderRow.orderStatus, nextStatus);
+      await recalculateCustomerOrderStats(db, orderRow.userId, customer.phone);
+      await invalidateHomeCache(c.env);
+    }
   } else {
     await db
       .update(courierInfo)

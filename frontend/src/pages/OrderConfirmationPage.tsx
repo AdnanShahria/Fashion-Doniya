@@ -240,6 +240,21 @@ export const OrderConfirmationPage: React.FC = () => {
                             )}
                           </div>
                         )}
+                        {item.selectedAddons && item.selectedAddons.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {item.selectedAddons.map((addon, addonIdx) => (
+                              <span
+                                key={`${addon.addonId}-${addon.fabricId}-${addonIdx}`}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#FAF8F4] border border-[#EDE5D9] rounded text-[10px] text-[#242424]/85"
+                              >
+                                <span className="font-semibold text-[#850B1B]">{addon.addonName}</span>
+                                <span>· {addon.fabricName}</span>
+                                <span>×{addon.count}</span>
+                                <span className="font-bold text-[#242424] tabular-nums">৳{addon.totalAddonPrice}</span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </td>
                       <td className="p-3 text-center font-medium text-[#C5A46D]">{item.fabricWidth} বহর</td>
                       <td className="p-3 text-center">{item.color}</td>
