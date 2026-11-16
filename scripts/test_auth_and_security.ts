@@ -49,7 +49,21 @@ async function apiReq(
   return app.fetch(req, testEnv);
 }
 
+const EMAIL_ENV_KEYS = [
+  'ORBITMAIL_API_KEY',
+  'SENDPULSE_CLIENT_ID',
+  'SENDPULSE_CLIENT_SECRET',
+  'RESEND_API_KEY',
+  'AMAZON_SES_ACCESS_KEY_ID',
+  'GOOGLE_SCRIPT_URL',
+];
+const savedEmailEnv: Record<string, string | undefined> = {};
+
 beforeAll(async () => {
+  for (const key of EMAIL_ENV_KEYS) {
+    savedEmailEnv[key] = process.env[key];
+    delete process.env[key];
+  }
   const migrationSql = fs.readFileSync(
     path.resolve(process.cwd(), 'backend/drizzle/0000_misty_pandemic.sql'),
     'utf-8'
@@ -66,6 +80,10 @@ beforeAll(async () => {
 });
 
 afterAll(() => {
+  for (const key of EMAIL_ENV_KEYS) {
+    if (savedEmailEnv[key] !== undefined) process.env[key] = savedEmailEnv[key];
+    else delete process.env[key];
+  }
   try {
     if (fs.existsSync(TEST_DB_ABS)) fs.unlinkSync(TEST_DB_ABS);
   } catch {
