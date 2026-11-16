@@ -8,10 +8,14 @@ import { appendAdminLog } from '../utils/helpers';
 import { invalidateHomeCache } from '../utils/cache';
 import { clearBulkMicroCache } from './bulk';
 import { DEFAULT_INDEXNOW_KEY } from '../config/cloudflare-env';
+import { parseImageUploadRequest, storeImageBytes } from '../utils/media-upload';
+import { diagnosticsRouter } from './diagnostics';
 
 export const systemRouter = new Hono<AppEnv>();
 export const adminSystemRouter = new Hono<AppEnv>();
 export const seoRouter = new Hono<AppEnv>();
+
+adminSystemRouter.route('/diagnostics', diagnosticsRouter);
 
 systemRouter.get('/settings', async (c) => {
   const db = c.get('db');
@@ -136,15 +140,6 @@ adminSystemRouter.get('/activity-logs', async (c) => {
   });
 });
 
-function base64ToUint8Array(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
 /**
  * Image Upload Pipeline:
  * 1. Primary: Cloudflare R2 (env.MEDIA_BUCKET) -> returns /media/<key>
@@ -156,105 +151,24 @@ async function handleImageUpload(c: Context<AppEnv>) {
     return c.json({ success: false, message: 'Unauthorized Admin Access' }, 401);
   }
 
-  let bytes: Uint8Array | null = null;
-  let contentType = 'image/png';
-  let ext = 'png';
-  let fileNameBase = 'image';
-  let rawDataUrl = '';
-
-  const reqContentType = (c.req.header('content-type') || '').toLowerCase();
-  if (reqContentType.includes('multipart/form-data')) {
-    const form = await c.req.formData().catch(() => null);
-    const file = form?.get('file') || form?.get('image');
-    if (file && typeof file === 'object' && 'arrayBuffer' in file) {
-      const f = file as File;
-      bytes = new Uint8Array(await f.arrayBuffer());
-      contentType = f.type || 'image/png';
-      ext = contentType.includes('jpeg') || contentType.includes('jpg')
-        ? 'jpg'
-        : contentType.includes('webp')
-          ? 'webp'
-          : contentType.includes('svg')
-            ? 'svg'
-            : 'png';
-      fileNameBase = (f.name || 'upload').replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
-    }
-  } else {
-    const body = (await c.req.json().catch(() => ({}))) as {
-      dataUrl?: string;
-      fileName?: string;
-    };
-    rawDataUrl = String(body?.dataUrl || '').trim();
-    fileNameBase = String(body?.fileName || 'image').replace(/[^a-zA-Z0-9_-]/g, '_');
-    const match = rawDataUrl.match(/^data:image\/(png|jpeg|jpg|webp|gif|svg\+xml);base64,(.+)$/i);
-    if (match) {
-      ext = match[1].toLowerCase() === 'jpeg' ? 'jpg' : match[1].toLowerCase() === 'svg+xml' ? 'svg' : match[1].toLowerCase();
-      contentType = `image/${match[1].toLowerCase()}`;
-      bytes = base64ToUint8Array(match[2]);
-    }
-  }
-
-  if (!bytes || bytes.length === 0) {
+  const payload = await parseImageUploadRequest(c);
+  if (!payload) {
     return c.json(
       { success: false, message: 'শুধুমাত্র বৈধ ছবির ফাইল (PNG, JPG, WEBP, GIF) আপলোড করা যাবে।' },
       400
     );
   }
-  if (bytes.length > 10 * 1024 * 1024) {
+  if (payload.bytes.length > 10 * 1024 * 1024) {
     return c.json({ success: false, message: 'ছবির সাইজ সর্বোচ্চ ১০ মেগাবাইটের মধ্যে হতে হবে।' }, 400);
   }
 
-  const objectKey = `uploads/${fileNameBase}_${Date.now()}.${ext}`;
-
-  // 1. Primary: Cloudflare R2
-  if (c.env?.MEDIA_BUCKET) {
-    await c.env.MEDIA_BUCKET.put(objectKey, bytes, {
-      httpMetadata: { contentType },
-    });
-    return c.json({
-      success: true,
-      url: `/media/${objectKey}`,
-      key: objectKey,
-      provider: 'r2',
-    });
-  }
-
-  // 2. Fallback: ImgBB
-  const imgbbKey = String(c.env?.IMGBB_API_KEY || '').trim();
-  if (imgbbKey) {
-    try {
-      let binary = '';
-      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-      const formData = new FormData();
-      formData.append('image', btoa(binary));
-      const resp = await fetch(`https://api.imgbb.com/1/upload?key=${encodeURIComponent(imgbbKey)}`, {
-        method: 'POST',
-        body: formData,
-      });
-      if (resp.ok) {
-        const json = (await resp.json()) as { data?: { url?: string } };
-        if (json?.data?.url) {
-          return c.json({ success: true, url: json.data.url, provider: 'imgbb' });
-        }
-      }
-    } catch {
-      // fall through
-    }
-  }
-
-  // 3. Dev Fallback
-  let dataUrl = rawDataUrl;
-  if (!dataUrl) {
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    dataUrl = `data:${contentType};base64,${btoa(binary)}`;
-  }
-
+  const stored = await storeImageBytes(c.env, payload);
   return c.json({
     success: true,
-    url: dataUrl,
-    dataUrl,
-    provider: 'inline-dev',
+    url: stored.url,
+    ...(stored.key ? { key: stored.key } : {}),
+    ...(stored.dataUrl ? { dataUrl: stored.dataUrl } : {}),
+    provider: stored.provider,
   });
 }
 

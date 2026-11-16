@@ -12,13 +12,16 @@ import {
   Trash2, 
   Check, 
   AlertTriangle,
-  Megaphone
+  Megaphone,
+  FlaskConical
 } from 'lucide-react';
 import { AdminFloatingWidgetEditor } from '../../components/admin/AdminFloatingWidgetEditor';
+import { AdminSystemDiagnostics } from '../../components/admin/AdminSystemDiagnostics';
 
 export const AdminSettings: React.FC = () => {
   const { settings, refreshData, showToast, navigateTo } = useStore();
   const [formData, setFormData] = useState<StoreSettings>({ ...settings });
+  const [activeSubTab, setActiveSubTab] = useState<'general' | 'diagnostics'>('general');
 
   // Coupon state
   const [newCouponCode, setNewCouponCode] = useState('');
@@ -92,6 +95,38 @@ export const AdminSettings: React.FC = () => {
         </button>
       </div>
 
+      {/* Sub-Tab Switcher */}
+      <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-xl border border-[#EDE5D9] text-xs">
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('general')}
+          className={`px-4 py-2 rounded-lg font-semibold flex items-center gap-2 cursor-pointer transition-colors ${
+            activeSubTab === 'general'
+              ? 'bg-[#242424] text-white font-bold'
+              : 'text-[#242424]/75 hover:bg-[#FAF8F4]'
+          }`}
+        >
+          <Settings className="w-3.5 h-3.5" />
+          <span>স্টোর ও পেমেন্ট কনফিগারেশন</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('diagnostics')}
+          className={`px-4 py-2 rounded-lg font-semibold flex items-center gap-2 cursor-pointer transition-colors ${
+            activeSubTab === 'diagnostics'
+              ? 'bg-[#242424] text-white font-bold'
+              : 'text-[#242424]/75 hover:bg-[#FAF8F4]'
+          }`}
+        >
+          <FlaskConical className="w-3.5 h-3.5 text-[#D5A64A]" />
+          <span>সিস্টেম টেস্টিং ও ডায়াগনস্টিকস (Email, Image Upload &amp; More)</span>
+        </button>
+      </div>
+
+      {activeSubTab === 'diagnostics' ? (
+        <AdminSystemDiagnostics />
+      ) : (
+        <>
       <form onSubmit={handleSaveSettings} className="space-y-8">
         
         {/* Section 0: Brand Identity, Logo, Favicon, Currency & Maintenance Mode */}
@@ -755,6 +790,8 @@ export const AdminSettings: React.FC = () => {
           </button>
         </form>
       </div>
+        </>
+      )}
 
     </div>
   );

@@ -118,6 +118,17 @@ export async function setHomeCache<T>(env: Bindings, value: T): Promise<void> {
   return setEdgeCache(env, HOME_BULK_KV_KEY, value, DEFAULT_TTL_SECONDS);
 }
 
+export async function deleteEdgeCache(env: Bindings, key: string): Promise<void> {
+  memoryFallback.delete(key);
+  if (env?.CACHE_KV) {
+    try {
+      await env.CACHE_KV.delete(key);
+    } catch {
+      // ignore KV delete errors
+    }
+  }
+}
+
 export async function invalidateHomeCache(env?: Bindings): Promise<void> {
   memoryFallback.delete(HOME_BULK_KV_KEY);
   memoryFallback.clear();

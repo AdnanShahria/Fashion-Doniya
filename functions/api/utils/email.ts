@@ -9,6 +9,7 @@ export interface SendEmailOptions {
   html: string;
   text?: string;
   replyTo?: string;
+  provider?: EmailProviderName | 'auto';
 }
 
 export interface EmailAttemptResult {
@@ -17,6 +18,7 @@ export interface EmailAttemptResult {
   status?: number;
   error?: string;
   messageId?: string;
+  durationMs?: number;
 }
 
 export interface SendEmailResult {
@@ -24,6 +26,7 @@ export interface SendEmailResult {
   provider: EmailProviderName | 'dev_log';
   messageId?: string;
   attempts: EmailAttemptResult[];
+  durationMs?: number;
 }
 
 const DEFAULT_PROVIDER_ORDER: EmailProviderName[] = [
@@ -60,8 +63,9 @@ export async function sendEmail({
     'https://mail.orbitsaas.cloud/api/v1/send';
   const from =
     env?.ORBITMAIL_FROM ||
-    (typeof process !== 'undefined' ? process.env?.ORBITMAIL_FROM : '') ||
-    'notifications@fashion-doniya.com';
+    env?.EMAIL_FROM ||
+    (typeof process !== 'undefined' ? process.env?.ORBITMAIL_FROM || process.env?.EMAIL_FROM : '') ||
+    'contact@orbitsaas.cloud';
 
   const res = await fetch(url, {
     method: 'POST',
@@ -145,11 +149,12 @@ function resolveSender(
   const fromEmail = String(
     providerEmail ||
       env?.EMAIL_FROM ||
+      env?.ORBITMAIL_FROM ||
       env?.SENDPULSE_FROM_EMAIL ||
       env?.RESEND_FROM_EMAIL ||
       env?.SES_FROM_EMAIL ||
       env?.SMTP_USER ||
-      'support@fashiondoniyabd.com'
+      'contact@orbitsaas.cloud'
   ).trim();
   const fromName = String(
     providerName ||
@@ -206,6 +211,24 @@ export function getEmailProvidersStatus(env: Bindings) {
       String(env?.AWS_SECRET_ACCESS_KEY || env?.SES_SECRET_ACCESS_KEY || '').trim()
   );
   const hasGoogleScript = Boolean(String(env?.GOOGLE_SCRIPT_URL || '').trim());
+  const { fromEmail, fromName } = resolveSender(env);
+  const orbitmailFrom = String(
+    env?.ORBITMAIL_FROM ||
+      env?.EMAIL_FROM ||
+      (typeof process !== 'undefined' ? process.env?.ORBITMAIL_FROM || process.env?.EMAIL_FROM : '') ||
+      'contact@orbitsaas.cloud'
+  ).trim();
+  const orbitmailUrl = String(
+    env?.ORBITMAIL_URL ||
+      (typeof process !== 'undefined' ? process.env?.ORBITMAIL_URL : '') ||
+      'https://mail.orbitsaas.cloud/api/v1/send'
+  ).trim();
+  let orbitmailDomain = 'mail.orbitsaas.cloud';
+  try {
+    orbitmailDomain = new URL(orbitmailUrl).host;
+  } catch {
+    // keep default
+  }
 
   return {
     orbitmail: hasOrbitMail,
@@ -214,6 +237,10 @@ export function getEmailProvidersStatus(env: Bindings) {
     ses: hasSes,
     google_script: hasGoogleScript,
     order: resolveProviderOrder(env),
+    fromEmail,
+    fromName,
+    orbitmailFrom,
+    orbitmailDomain,
   };
 }
 
@@ -609,26 +636,48 @@ export async function sendTransactionalEmail(
   env: Bindings,
   opts: SendEmailOptions
 ): Promise<SendEmailResult> {
-  const order = resolveProviderOrder(env);
+  const totalStart = Date.now();
+  const explicitProvider =
+    opts.provider && opts.provider !== 'auto' ? opts.provider : undefined;
+  const order: EmailProviderName[] = explicitProvider
+    ? [explicitProvider]
+    : resolveProviderOrder(env);
   const attempts: EmailAttemptResult[] = [];
 
   for (const provider of order) {
     const handler = PROVIDER_HANDLERS[provider];
-    const result = await handler(env, opts);
-    if (!result) continue; // Provider credentials not configured; skip cleanly
+    if (!handler) continue;
 
-    attempts.push(result);
-    if (result.ok) {
+    const attemptStart = Date.now();
+    const result = await handler(env, opts);
+    const attemptDuration = Date.now() - attemptStart;
+
+    if (!result) {
+      if (explicitProvider) {
+        attempts.push({
+          provider,
+          ok: false,
+          error: 'Provider credentials are not configured',
+          durationMs: attemptDuration,
+        });
+      }
+      continue; // Provider credentials not configured; skip cleanly
+    }
+
+    const withTiming: EmailAttemptResult = { ...result, durationMs: attemptDuration };
+    attempts.push(withTiming);
+    if (withTiming.ok) {
       return {
         delivered: true,
         provider,
-        messageId: result.messageId,
+        messageId: withTiming.messageId,
         attempts,
+        durationMs: Date.now() - totalStart,
       };
     }
 
     console.warn(
-      `[Email] Provider "${provider}" failed (${result.status ?? 'error'}: ${result.error || 'unknown'}), trying next fallback.`
+      `[Email] Provider "${provider}" failed (${withTiming.status ?? 'error'}: ${withTiming.error || 'unknown'}), trying next fallback.`
     );
   }
 
@@ -639,5 +688,6 @@ export async function sendTransactionalEmail(
     delivered: false,
     provider: 'dev_log',
     attempts,
+    durationMs: Date.now() - totalStart,
   };
 }
