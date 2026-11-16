@@ -35,20 +35,34 @@ export const api = axios.create({
   },
 });
 
+function normalizeApiPath(rawUrl: string): string {
+  const withoutOrigin = rawUrl.replace(/^https?:\/\/[^/]+/i, '');
+  const withoutQuery = withoutOrigin.split('?')[0].split('#')[0];
+  return withoutQuery.replace(/^\/api(?:\/v\d+)?/, '') || '/';
+}
+
+function isAdminApiPath(rawUrl: string): boolean {
+  const path = normalizeApiPath(rawUrl);
+  return (
+    path === '/admin' ||
+    path.startsWith('/admin/') ||
+    path === '/bulk/admin-stats' ||
+    path.startsWith('/seo/ping') ||
+    path.startsWith('/courier/sync') ||
+    path.startsWith('/system/upload-image')
+  );
+}
+
 api.interceptors.request.use((config) => {
   const url = String(config.url || '');
-  const isAdminRoute =
-    url.includes('/admin') ||
-    url.includes('/seo/ping') ||
-    url.includes('/courier/sync') ||
-    url.includes('/system/upload-image');
+  const isAdminRoute = isAdminApiPath(url);
 
   if (config.data instanceof FormData && config.headers) {
     delete config.headers['Content-Type'];
   }
 
-  const adminToken = getAdminAuthToken();
-  if (isAdminRoute || (url.includes('/orders/sync-client') && adminToken)) {
+  if (isAdminRoute) {
+    const adminToken = getAdminAuthToken();
     if (adminToken) {
       config.headers.Authorization = `Bearer ${adminToken}`;
     }
@@ -80,13 +94,10 @@ api.interceptors.response.use(
     if (typeof window !== 'undefined') {
       const status = error?.response?.status;
       const url = String(error?.config?.url || '');
-      const isAdminCall =
-        url.includes('/admin') ||
-        url.includes('/seo/ping') ||
-        url.includes('/courier/sync') ||
-        url.includes('/system/upload-image');
+      const relPath = normalizeApiPath(url);
+      const isAdminCall = isAdminApiPath(url);
 
-      if (status === 401 && isAdminCall && !url.includes('/admin/auth/login')) {
+      if (status === 401 && isAdminCall && relPath !== '/admin/auth/login') {
         try {
           localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
         } catch {
@@ -100,10 +111,11 @@ api.interceptors.response.use(
       } else if (
         status === 401 &&
         !isAdminCall &&
-        !url.includes('/auth/login') &&
-        !url.includes('/auth/register') &&
-        !url.includes('/auth/forgot-password') &&
-        !url.includes('/auth/reset-password')
+        relPath !== '/auth/login' &&
+        relPath !== '/auth/register' &&
+        relPath !== '/auth/forgot-password' &&
+        relPath !== '/auth/reset-password' &&
+        relPath !== '/auth/me'
       ) {
         try {
           localStorage.removeItem(AUTH_STORAGE_KEY);

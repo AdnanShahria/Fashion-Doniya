@@ -1,25 +1,32 @@
-import { sqliteTable, text, real, integer } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, real, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
-export const users = sqliteTable('users', {
-  id: text('id').primaryKey(),
-  fullName: text('full_name').notNull(),
-  phone: text('phone').notNull(),
-  email: text('email'),
-  passwordHash: text('password_hash'),
-  passwordSalt: text('password_salt'),
-  role: text('role').notNull().default('user'),
-  status: text('status').notNull().default('active'),
-  district: text('district'),
-  upazila: text('upazila'),
-  area: text('area'),
-  fullAddress: text('full_address'),
-  savedMeasurements: text('saved_measurements'),
-  walletBalance: real('wallet_balance').notNull().default(0),
-  totalOrders: integer('total_orders').notNull().default(0),
-  totalSpent: real('total_spent').notNull().default(0),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at').notNull(),
-});
+export const users = sqliteTable(
+  'users',
+  {
+    id: text('id').primaryKey(),
+    fullName: text('full_name').notNull(),
+    phone: text('phone').notNull(),
+    email: text('email'),
+    passwordHash: text('password_hash'),
+    passwordSalt: text('password_salt'),
+    role: text('role').notNull().default('user'),
+    status: text('status').notNull().default('active'),
+    district: text('district'),
+    upazila: text('upazila'),
+    area: text('area'),
+    fullAddress: text('full_address'),
+    savedMeasurements: text('saved_measurements'),
+    walletBalance: real('wallet_balance').notNull().default(0),
+    totalOrders: integer('total_orders').notNull().default(0),
+    totalSpent: real('total_spent').notNull().default(0),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('users_phone_uidx').on(table.phone),
+    index('users_email_idx').on(table.email),
+  ]
+);
 
 export const addresses = sqliteTable('addresses', {
   id: text('id').primaryKey(),
@@ -153,13 +160,17 @@ export const walletTransactions = sqliteTable('wallet_transactions', {
   createdAt: text('created_at').notNull(),
 });
 
-export const otpCodes = sqliteTable('otp_codes', {
-  id: text('id').primaryKey(),
-  identifier: text('identifier').notNull(),
-  codeHash: text('code_hash').notNull(),
-  purpose: text('purpose').notNull().default('auth'),
-  expiresAt: text('expires_at').notNull(),
-  attempts: integer('attempts').notNull().default(0),
-  consumedAt: text('consumed_at'),
-  createdAt: text('created_at').notNull(),
-});
+export const otpCodes = sqliteTable(
+  'otp_codes',
+  {
+    id: text('id').primaryKey(),
+    identifier: text('identifier').notNull(),
+    codeHash: text('code_hash').notNull(),
+    purpose: text('purpose').notNull().default('auth'),
+    expiresAt: text('expires_at').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    consumedAt: text('consumed_at'),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [index('otp_codes_identifier_purpose_idx').on(table.identifier, table.purpose)]
+);

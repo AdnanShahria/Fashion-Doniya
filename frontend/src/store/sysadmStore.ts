@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
 interface SysadmState {
   token: string | null;
@@ -6,8 +7,16 @@ interface SysadmState {
   setSession: (token: string | null, email: string | null) => void;
 }
 
-export const useSysadmStore = create<SysadmState>((set) => ({
-  token: null,
-  email: null,
-  setSession: (token, email) => set({ token, email }),
-}));
+export const useSysadmStore = create<SysadmState>()(
+  persist(
+    (set) => ({
+      token: null,
+      email: null,
+      setSession: (token, email) => set({ token, email }),
+    }),
+    {
+      name: 'fd_sysadm_session',
+      storage: createJSONStorage(() => sessionStorage),
+    }
+  )
+);

@@ -100,6 +100,8 @@ const AUTHENTICATED_USER_PREFIXES = [
   '/returns',
   '/users/',
   '/bulk/user',
+  '/customers/sync',
+  '/orders/my',
 ];
 
 function createApiSubApp() {
@@ -120,11 +122,12 @@ function createApiSubApp() {
   // 3. Demo Mode Lock (blocks non-auth/non-sysadm mutating requests when demo mode is active)
   sub.use('*', async (c, next) => {
     if (MUTATION_METHODS.has(c.req.method)) {
-      const path = c.req.path;
+      const apiRelPath = (c.req.path.replace(/^\/api(?:\/v\d+)?/, '') || '/').replace(/\/+$/, '') || '/';
       const isAuthPath =
-        path.includes('/auth/') ||
-        path.includes('/sysadm/') ||
-        path.includes('/orders/verify');
+        apiRelPath.startsWith('/auth/') ||
+        apiRelPath.startsWith('/admin/auth/') ||
+        apiRelPath.startsWith('/sysadm/') ||
+        apiRelPath === '/orders/verify';
       if (!isAuthPath) {
         const db = c.get('db');
         if (c.get('isDemo') || (await isDemoModeActive(db, c.env))) {
@@ -144,14 +147,14 @@ function createApiSubApp() {
 
   // 4. Route Authorization Guard
   sub.use('*', async (c, next) => {
-    const path = c.req.path;
+    const apiRelPath = (c.req.path.replace(/^\/api(?:\/v\d+)?/, '') || '/').replace(/\/+$/, '') || '/';
     const isAdminRoute =
-      path.includes('/admin/') ||
-      path.endsWith('/admin') ||
-      path.includes('/bulk/admin-stats') ||
-      path.includes('/seo/ping');
+      apiRelPath === '/admin' ||
+      apiRelPath.startsWith('/admin/') ||
+      apiRelPath === '/bulk/admin-stats' ||
+      apiRelPath === '/seo/ping';
 
-    if (isAdminRoute && !path.includes('/admin/auth/login')) {
+    if (isAdminRoute && apiRelPath !== '/admin/auth/login') {
       if (!c.get('isAdmin')) {
         return c.json(
           {
@@ -164,8 +167,8 @@ function createApiSubApp() {
       }
     }
 
-    const requiresAuthUser = AUTHENTICATED_USER_PREFIXES.some((prefix) =>
-      path.includes(prefix)
+    const requiresAuthUser = AUTHENTICATED_USER_PREFIXES.some(
+      (prefix) => apiRelPath === prefix || apiRelPath.startsWith(prefix)
     );
     if (requiresAuthUser && !c.get('user') && !c.get('isAdmin')) {
       return c.json({ success: false, message: 'অনুগ্রহ করে প্রথমে লগইন করুন।' }, 401);

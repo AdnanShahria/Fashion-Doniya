@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { eq } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import type { AppEnv } from '../types';
 import { systemSettings, otpCodes } from '../../../backend/server/db/schemas/index';
 import { getSysadmEmail, signSysadmJwt, verifySysadmRequest } from '../utils/sysadmAuth';
@@ -24,20 +24,33 @@ sysadmRouter.post('/request-otp', authRateLimiter, async (c) => {
   const code = generateSecureOtp();
   const { salt, hash } = await hashPassword(code);
   const now = new Date();
+  const nowIso = now.toISOString();
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
 
   const db = c.get('db');
+  await db
+    .update(otpCodes)
+    .set({ consumedAt: nowIso })
+    .where(
+      and(
+        eq(otpCodes.identifier, email),
+        eq(otpCodes.purpose, 'sysadm_login'),
+        isNull(otpCodes.consumedAt)
+      )
+    );
+
+  const otpId = `sysadm-otp-${crypto.randomUUID()}`;
   await db.insert(otpCodes).values({
-    id: `sysadm-otp-${Date.now()}`,
+    id: otpId,
     identifier: email,
     codeHash: `${salt}:${hash}`,
     purpose: 'sysadm_login',
     expiresAt,
     attempts: 0,
-    createdAt: now.toISOString(),
+    createdAt: nowIso,
   });
 
-  await sendTransactionalEmail(c.env, {
+  const emailResult = await sendTransactionalEmail(c.env, {
     to: email,
     subject: 'Fashion Doniya SuperAdmin OTP',
     html: `<p>Your SuperAdmin login OTP is: <strong>${code}</strong></p>`,
@@ -54,10 +67,15 @@ sysadmRouter.post('/request-otp', authRateLimiter, async (c) => {
     c.env?.NODE_ENV !== 'production' &&
     (hostname === 'localhost' || hostname === '127.0.0.1');
 
+  if (!emailResult.delivered && !isLocalDev) {
+    await db.delete(otpCodes).where(eq(otpCodes.id, otpId)).catch(() => {});
+    return c.json({ success: false, message: 'Failed to deliver SuperAdmin OTP.' }, 503);
+  }
+
   return c.json({
     success: true,
     message: 'OTP dispatched.',
-    ...(isLocalDev ? { devOtp: code } : {}),
+    ...(isLocalDev && !emailResult.delivered ? { devOtp: code } : {}),
   });
 });
 
@@ -71,18 +89,34 @@ sysadmRouter.post('/verify-otp', authRateLimiter, async (c) => {
   }
 
   const db = c.get('db');
-  const rows = await db.select().from(otpCodes).where(eq(otpCodes.identifier, email));
-  const latest = rows
-    .filter((r) => r.purpose === 'sysadm_login' && !r.consumedAt)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  const rows = await db
+    .select()
+    .from(otpCodes)
+    .where(
+      and(
+        eq(otpCodes.identifier, email),
+        eq(otpCodes.purpose, 'sysadm_login'),
+        isNull(otpCodes.consumedAt)
+      )
+    )
+    .orderBy(desc(otpCodes.createdAt));
+  const latest = rows[0];
 
   if (!latest || new Date(latest.expiresAt).getTime() < Date.now()) {
     return c.json({ success: false, message: 'OTP expired or missing.' }, 401);
   }
 
-  const [salt, expectedHash] = latest.codeHash.split(':');
-  const valid = await verifyPassword(otp, salt, expectedHash);
+  if ((latest.attempts || 0) >= 5) {
+    return c.json({ success: false, message: 'Too many invalid OTP attempts. Request a new OTP.' }, 429);
+  }
+
+  const [salt, expectedHash] = String(latest.codeHash || '').split(':');
+  const valid = salt && expectedHash ? await verifyPassword(otp, salt, expectedHash) : false;
   if (!valid) {
+    await db
+      .update(otpCodes)
+      .set({ attempts: (latest.attempts || 0) + 1 })
+      .where(eq(otpCodes.id, latest.id));
     return c.json({ success: false, message: 'Invalid OTP.' }, 401);
   }
 

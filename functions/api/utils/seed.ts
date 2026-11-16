@@ -294,7 +294,10 @@ async function runEnsureSeeded(db: AppDatabase, env?: Bindings): Promise<void> {
     }
   }
 
-  // Customers
+  const isProd = env?.NODE_ENV === 'production' || Boolean(env?.DB);
+  const isDemoEnv = String(env?.DEMO_MODE || '').toLowerCase() === 'true';
+
+  // Customers (seed demo customer only in non-production or explicit DEMO_MODE)
   const demoCustomerDefaults: CustomerUser = {
     id: 'cust-1',
     fullName: 'নুসরাত জাহান',
@@ -322,69 +325,71 @@ async function runEnsureSeeded(db: AppDatabase, env?: Bindings): Promise<void> {
         : [demoCustomerDefaults, ...INITIAL_CUSTOMERS]
       : [demoCustomerDefaults];
 
-  const existingUsers = await db.select({ id: users.id }).from(users).limit(1);
-  if (existingUsers.length === 0) {
-    const { salt: cSalt, hash: cHash } = await hashPassword('123456');
-    for (const c of customersToSeed) {
-      await db
-        .insert(users)
-        .values({
-          id: c.id,
-          fullName: c.fullName,
-          phone: normalizePhone(c.phone),
-          email: c.email || null,
-          passwordHash: cHash,
-          passwordSalt: cSalt,
-          role: 'user',
-          status: c.status || 'active',
-          district: c.district || c.address?.district || null,
-          upazila: c.upazila || c.address?.upazila || null,
-          area: c.address?.area || null,
-          fullAddress: c.fullAddress || c.address?.fullAddress || null,
-          savedMeasurements: c.savedMeasurements ? JSON.stringify(c.savedMeasurements) : null,
-          walletBalance: 0,
-          totalOrders: 0,
-          totalSpent: 0,
-          createdAt: c.createdAt || now,
-          updatedAt: c.updatedAt || now,
-        })
-        .onConflictDoNothing();
-    }
-  } else {
-    const demoUserById = await db.select().from(users).where(eq(users.id, 'cust-1')).get();
-    const demoUserByPhone =
-      demoUserById || (await db.select().from(users).where(eq(users.phone, '01711223344')).get());
-    if (demoUserByPhone && (!demoUserByPhone.passwordHash || !demoUserByPhone.passwordSalt)) {
+  if (!isProd || isDemoEnv) {
+    const existingUsers = await db.select({ id: users.id }).from(users).limit(1);
+    if (existingUsers.length === 0) {
       const { salt: cSalt, hash: cHash } = await hashPassword('123456');
-      await db
-        .update(users)
-        .set({ passwordHash: cHash, passwordSalt: cSalt, updatedAt: now })
-        .where(eq(users.id, demoUserByPhone.id));
-    } else if (!demoUserByPhone) {
-      const { salt: cSalt, hash: cHash } = await hashPassword('123456');
-      await db
-        .insert(users)
-        .values({
-          id: demoCustomerDefaults.id,
-          fullName: demoCustomerDefaults.fullName,
-          phone: demoCustomerDefaults.phone,
-          email: demoCustomerDefaults.email,
-          passwordHash: cHash,
-          passwordSalt: cSalt,
-          role: 'user',
-          status: demoCustomerDefaults.status,
-          district: demoCustomerDefaults.district,
-          upazila: demoCustomerDefaults.upazila,
-          area: demoCustomerDefaults.address?.area || null,
-          fullAddress: demoCustomerDefaults.fullAddress,
-          savedMeasurements: null,
-          walletBalance: 0,
-          totalOrders: 0,
-          totalSpent: 0,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoNothing();
+      for (const c of customersToSeed) {
+        await db
+          .insert(users)
+          .values({
+            id: c.id,
+            fullName: c.fullName,
+            phone: normalizePhone(c.phone),
+            email: c.email || null,
+            passwordHash: cHash,
+            passwordSalt: cSalt,
+            role: 'user',
+            status: c.status || 'active',
+            district: c.district || c.address?.district || null,
+            upazila: c.upazila || c.address?.upazila || null,
+            area: c.address?.area || null,
+            fullAddress: c.fullAddress || c.address?.fullAddress || null,
+            savedMeasurements: c.savedMeasurements ? JSON.stringify(c.savedMeasurements) : null,
+            walletBalance: 0,
+            totalOrders: 0,
+            totalSpent: 0,
+            createdAt: c.createdAt || now,
+            updatedAt: c.updatedAt || now,
+          })
+          .onConflictDoNothing();
+      }
+    } else {
+      const demoUserById = await db.select().from(users).where(eq(users.id, 'cust-1')).get();
+      const demoUserByPhone =
+        demoUserById || (await db.select().from(users).where(eq(users.phone, '01711223344')).get());
+      if (demoUserByPhone && (!demoUserByPhone.passwordHash || !demoUserByPhone.passwordSalt)) {
+        const { salt: cSalt, hash: cHash } = await hashPassword('123456');
+        await db
+          .update(users)
+          .set({ passwordHash: cHash, passwordSalt: cSalt, updatedAt: now })
+          .where(eq(users.id, demoUserByPhone.id));
+      } else if (!demoUserByPhone) {
+        const { salt: cSalt, hash: cHash } = await hashPassword('123456');
+        await db
+          .insert(users)
+          .values({
+            id: demoCustomerDefaults.id,
+            fullName: demoCustomerDefaults.fullName,
+            phone: demoCustomerDefaults.phone,
+            email: demoCustomerDefaults.email,
+            passwordHash: cHash,
+            passwordSalt: cSalt,
+            role: 'user',
+            status: demoCustomerDefaults.status,
+            district: demoCustomerDefaults.district,
+            upazila: demoCustomerDefaults.upazila,
+            area: demoCustomerDefaults.address?.area || null,
+            fullAddress: demoCustomerDefaults.fullAddress,
+            savedMeasurements: null,
+            walletBalance: 0,
+            totalOrders: 0,
+            totalSpent: 0,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoNothing();
+      }
     }
   }
 
@@ -530,21 +535,11 @@ async function runEnsureSeeded(db: AppDatabase, env?: Bindings): Promise<void> {
   }
 
   // System settings & Admin account
-  const defaultPass = String(env?.ADMIN_PASSWORD || 'Admin@2026');
-  const { salt, hash } = await hashPassword(defaultPass);
-  const adminAccount = {
-    email: String(env?.ADMIN_EMAIL || 'admin@fashiondoniyabd.com').toLowerCase(),
-    name: 'Fashion Doniya Admin',
-    role: 'super_admin',
-    passwordSalt: salt,
-    passwordHash: hash,
-    updatedAt: now,
-  };
-
+  const configuredAdminPass = String(env?.ADMIN_PASSWORD || '').trim();
+  const defaultPass = configuredAdminPass || (!isProd || isDemoEnv ? 'Admin@2026' : '');
   const settingsEntries: Array<{ key: string; value: string }> = [
     { key: 'store_settings', value: JSON.stringify(INITIAL_SETTINGS) },
     { key: 'payment_settings', value: JSON.stringify(INITIAL_PAYMENT_SETTINGS) },
-    { key: 'admin_account', value: JSON.stringify(adminAccount) },
     { key: 'demo.mode', value: 'false' },
     {
       key: 'tier_capabilities',
@@ -560,6 +555,21 @@ async function runEnsureSeeded(db: AppDatabase, env?: Bindings): Promise<void> {
     },
     { key: SEED_MARKER_KEY, value: SEED_VERSION },
   ];
+
+  if (defaultPass) {
+    const { salt, hash } = await hashPassword(defaultPass);
+    const adminAccount = {
+      email: String(env?.ADMIN_EMAIL || 'admin@fashiondoniyabd.com').toLowerCase(),
+      name: 'Fashion Doniya Admin',
+      role: 'super_admin',
+      passwordSalt: salt,
+      passwordHash: hash,
+      updatedAt: now,
+    };
+    settingsEntries.splice(2, 0, { key: 'admin_account', value: JSON.stringify(adminAccount) });
+  } else {
+    console.warn('[Seed] ADMIN_PASSWORD is not set in production; skipping default admin_account seeding.');
+  }
 
   for (const entry of settingsEntries) {
     if (entry.key === SEED_MARKER_KEY) {

@@ -47,19 +47,39 @@ export const SysAdmPage: React.FC = () => {
     }
   };
 
+  const handleSysadmError = (err: unknown, fallback: string) => {
+    const status = (err as { response?: { status?: number; data?: { message?: string } } })?.response?.status;
+    const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+    if (status === 401 || status === 403) {
+      setSession(null, null);
+      setStatusInfo(null);
+      setMessage(msg || 'SuperAdmin session expired. Please sign in again.');
+      return;
+    }
+    setMessage(msg || fallback);
+  };
+
   const purgeCache = async () => {
-    const res = await axios.post(`${ENV.API_BASE_URL}/sysadm/cache/purge`, {}, { headers: authHeaders });
-    setMessage(res.data?.message || 'Cache purged.');
+    try {
+      const res = await axios.post(`${ENV.API_BASE_URL}/sysadm/cache/purge`, {}, { headers: authHeaders });
+      setMessage(res.data?.message || 'Cache purged.');
+    } catch (err) {
+      handleSysadmError(err, 'Failed to purge cache.');
+    }
   };
 
   const toggleDemoMode = async (enabled: boolean) => {
-    const res = await axios.post(
-      `${ENV.API_BASE_URL}/sysadm/demo-mode`,
-      { enabled },
-      { headers: authHeaders }
-    );
-    setStatusInfo((prev) => ({ ...(prev || {}), demoMode: res.data?.demoMode }));
-    setMessage(`Demo mode ${enabled ? 'enabled' : 'disabled'}.`);
+    try {
+      const res = await axios.post(
+        `${ENV.API_BASE_URL}/sysadm/demo-mode`,
+        { enabled },
+        { headers: authHeaders }
+      );
+      setStatusInfo((prev) => ({ ...(prev || {}), demoMode: res.data?.demoMode }));
+      setMessage(`Demo mode ${enabled ? 'enabled' : 'disabled'}.`);
+    } catch (err) {
+      handleSysadmError(err, 'Failed to update demo mode.');
+    }
   };
 
   return (

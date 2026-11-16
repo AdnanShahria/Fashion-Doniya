@@ -8,6 +8,13 @@
       "when": 1794637350345,
       "tag": "0000_misty_pandemic",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1794700000000,
+      "tag": "0001_auth_indexes",
+      "breakpoints": true
     }
   ]
 }

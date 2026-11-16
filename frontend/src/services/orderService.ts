@@ -777,8 +777,7 @@ export const orderService = {
     try {
       const qs = new URLSearchParams();
       if (params.isAdmin) {
-        const token = getAdminAuthToken();
-        if (token) qs.set('adminToken', token);
+        qs.set('adminStream', '1');
       } else if (params.orderNumber && params.phone) {
         qs.set('orderNumber', params.orderNumber.trim().toUpperCase());
         qs.set('phone', StorageService.normalizePhone(params.phone));

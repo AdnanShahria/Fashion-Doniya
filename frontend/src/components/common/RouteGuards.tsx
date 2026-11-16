@@ -20,7 +20,19 @@ export const ProtectedRoute: React.FC<{
   }
 
   if (role === 'user' && !currentUser) {
-    // Allow AccountPage to render its own inline login/register screen
+    const cleanPath = location.pathname.replace(/\/+$/, '') || '/';
+    const publicAccountPaths = new Set([
+      '/account',
+      '/login',
+      '/register',
+      '/forgot-password',
+      '/account/forgot-password',
+      '/reset-password',
+      '/account/reset-password',
+    ]);
+    if (!publicAccountPaths.has(cleanPath)) {
+      return <Navigate to="/login" replace />;
+    }
     return <>{children}</>;
   }
   return <>{children}</>;

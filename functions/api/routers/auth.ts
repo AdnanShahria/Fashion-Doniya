@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono';
-import { eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
 import type { AppEnv, AuthUser } from '../types';
+import type { AppDatabase } from '../utils/db-factory';
 import { users, systemSettings, otpCodes } from '../../../backend/server/db/schemas/index';
 import {
   hashPassword,
@@ -13,7 +14,12 @@ import {
 import { normalizePhone, safeJsonParse, appendAdminLog, escapeHtml } from '../utils/helpers';
 import { sendTransactionalEmail } from '../utils/email';
 import { sendTransactionalSms } from '../utils/sms';
-import { authRateLimiter } from '../utils/rateLimiter';
+import {
+  authRateLimiter,
+  checkLoginThrottle,
+  clearLoginFailures,
+  recordLoginFailure,
+} from '../utils/rateLimiter';
 
 export const authRouter = new Hono<AppEnv>();
 export const adminAuthRouter = new Hono<AppEnv>();
@@ -27,6 +33,60 @@ interface AdminAccountRecord {
   updatedAt: string;
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+async function findUserByEmail(db: AppDatabase, email: string) {
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanEmail) return undefined;
+  return db
+    .select()
+    .from(users)
+    .where(sql`lower(trim(${users.email})) = ${cleanEmail}`)
+    .get();
+}
+
+async function findUserByIdentifier(db: AppDatabase, rawIdentifier: string) {
+  const cleanId = rawIdentifier.trim().toLowerCase();
+  if (!cleanId) return undefined;
+  if (cleanId.includes('@')) {
+    return findUserByEmail(db, cleanId);
+  }
+  const cleanPhone = normalizePhone(cleanId);
+  if (!cleanPhone) return undefined;
+  return db.select().from(users).where(eq(users.phone, cleanPhone)).get();
+}
+
+function buildPublicCustomerPayload(row: typeof users.$inferSelect, roleOverride?: AuthUser['role']) {
+  const role: AuthUser['role'] =
+    roleOverride ||
+    (row.role === 'admin' || row.role === 'super_admin' || row.role === 'sysadm'
+      ? row.role
+      : 'user');
+  return {
+    id: row.id,
+    fullName: row.fullName,
+    phone: row.phone,
+    email: row.email || undefined,
+    role,
+    district: row.district || undefined,
+    upazila: row.upazila || undefined,
+    area: row.area || undefined,
+    fullAddress: row.fullAddress || undefined,
+    address: {
+      district: row.district || '',
+      upazila: row.upazila || '',
+      area: row.area || '',
+      fullAddress: row.fullAddress || '',
+    },
+    savedMeasurements: safeJsonParse(row.savedMeasurements, undefined),
+    walletBalance: row.walletBalance,
+    totalOrders: row.totalOrders,
+    totalSpent: row.totalSpent,
+    status: row.status,
+    createdAt: row.createdAt,
+  };
+}
+
 // Customer Registration
 authRouter.post('/register', authRateLimiter, async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -35,7 +95,7 @@ authRouter.post('/register', authRateLimiter, async (c) => {
   const password = String(body.password || '');
   const email = body.email ? String(body.email).trim().toLowerCase() : null;
 
-  if (!fullName || !phone || !password || password.length < 6) {
+  if (!fullName || !phone || !password.trim() || password.length < 6) {
     return c.json(
       { success: false, message: 'নাম, মোবাইল নম্বর এবং কমপক্ষে ৬ অক্ষরের পাসওয়ার্ড আবশ্যক।' },
       400
@@ -49,7 +109,7 @@ authRouter.post('/register', authRateLimiter, async (c) => {
     );
   }
 
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (email && !EMAIL_RE.test(email)) {
     return c.json(
       { success: false, message: 'সঠিক ইমেইল ঠিকানা প্রদান করুন।' },
       400
@@ -58,24 +118,31 @@ authRouter.post('/register', authRateLimiter, async (c) => {
 
   const db = c.get('db');
   const existing = await db.select().from(users).where(eq(users.phone, phone)).get();
-  if (existing && existing.status === 'blocked') {
+  if (existing) {
+    if (existing.status === 'blocked') {
+      return c.json(
+        { success: false, code: 'ACCOUNT_BLOCKED', message: 'আপনার অ্যাকাউন্টটি ব্লক করা হয়েছে।' },
+        403
+      );
+    }
+    if (existing.passwordHash) {
+      return c.json(
+        { success: false, message: 'এই মোবাইল নম্বরে ইতিমধ্যেই একটি অ্যাকাউন্ট রয়েছে।' },
+        409
+      );
+    }
+    // Security: never allow unauthenticated /register to silently claim an existing guest/CRM row
     return c.json(
-      { success: false, code: 'ACCOUNT_BLOCKED', message: 'আপনার অ্যাকাউন্টটি ব্লক করা হয়েছে।' },
-      403
-    );
-  }
-  if (existing && existing.passwordHash) {
-    return c.json(
-      { success: false, message: 'এই মোবাইল নম্বরে ইতিমধ্যেই একটি অ্যাকাউন্ট রয়েছে।' },
+      {
+        success: false,
+        message: 'এই মোবাইল নম্বরে একটি প্রোফাইল ইতিমধ্যেই রয়েছে। পাসওয়ার্ড সেট করতে পাসওয়ার্ড রিসেট (OTP) ব্যবহার করুন।',
+      },
       409
     );
   }
 
   if (email) {
-    const allUsers = await db.select().from(users);
-    const emailConflict = allUsers.find(
-      (u) => u.id !== existing?.id && u.email && u.email.trim().toLowerCase() === email
-    );
+    const emailConflict = await findUserByEmail(db, email);
     if (emailConflict) {
       return c.json(
         { success: false, message: 'এই ইমেইল ঠিকানায় ইতিমধ্যেই একটি অ্যাকাউন্ট রয়েছে।' },
@@ -84,44 +151,16 @@ authRouter.post('/register', authRateLimiter, async (c) => {
     }
   }
 
-  // Security: prevent silent takeover of guest/CRM record if an existing email doesn't match
-  if (existing && !existing.passwordHash && existing.email) {
-    const existingEmail = existing.email.trim().toLowerCase();
-    if (!email || email !== existingEmail) {
-      return c.json(
-        {
-          success: false,
-          message: 'এই নম্বরের অ্যাকাউন্টটি পুনরুদ্ধার করতে পাসওয়ার্ড রিসেট (OTP) ব্যবহার করুন।',
-        },
-        409
-      );
-    }
-  }
-
   const now = new Date().toISOString();
   const { salt, hash } = await hashPassword(password);
-  const userId = existing?.id || `cust-${Date.now()}`;
-  const finalEmail = email || existing?.email || null;
+  const userId = `cust-${crypto.randomUUID()}`;
 
-  if (existing) {
-    await db
-      .update(users)
-      .set({
-        fullName,
-        email: finalEmail,
-        passwordHash: hash,
-        passwordSalt: salt,
-        role: 'user',
-        status: 'active',
-        updatedAt: now,
-      })
-      .where(eq(users.id, userId));
-  } else {
+  try {
     await db.insert(users).values({
       id: userId,
       fullName,
       phone,
-      email: finalEmail,
+      email,
       passwordHash: hash,
       passwordSalt: salt,
       role: 'user',
@@ -129,13 +168,19 @@ authRouter.post('/register', authRateLimiter, async (c) => {
       createdAt: now,
       updatedAt: now,
     });
+  } catch {
+    return c.json(
+      { success: false, message: 'এই মোবাইল নম্বর বা ইমেইলে ইতিমধ্যেই একটি অ্যাকাউন্ট রয়েছে।' },
+      409
+    );
   }
 
+  const createdRow = await db.select().from(users).where(eq(users.id, userId)).get();
   const token = await signJwt(
     {
       sub: userId,
       phone,
-      email: finalEmail || undefined,
+      email: email || undefined,
       fullName,
       role: 'user',
       pwdVer: computePasswordVersion(hash),
@@ -146,15 +191,17 @@ authRouter.post('/register', authRateLimiter, async (c) => {
   return c.json({
     success: true,
     token,
-    user: {
-      id: userId,
-      fullName,
-      phone,
-      email: finalEmail,
-      role: 'user',
-      status: 'active',
-      createdAt: existing?.createdAt || now,
-    },
+    user: createdRow
+      ? buildPublicCustomerPayload(createdRow, 'user')
+      : {
+          id: userId,
+          fullName,
+          phone,
+          email,
+          role: 'user' as const,
+          status: 'active',
+          createdAt: now,
+        },
   });
 });
 
@@ -168,20 +215,38 @@ authRouter.post('/login', authRateLimiter, async (c) => {
     return c.json({ success: false, message: 'মোবাইল নম্বর বা ইমেইল এবং পাসওয়ার্ড দিন।' }, 400);
   }
 
-  const db = c.get('db');
-  let userRow: typeof users.$inferSelect | undefined;
-  if (rawIdentifier.includes('@')) {
-    const cleanEmail = rawIdentifier.toLowerCase();
-    const allUsers = await db.select().from(users);
-    userRow = allUsers.find((u) => u.email?.trim().toLowerCase() === cleanEmail);
-  } else {
-    const phone = normalizePhone(rawIdentifier);
-    userRow = await db.select().from(users).where(eq(users.phone, phone)).get();
+  const throttleKey = rawIdentifier.includes('@')
+    ? rawIdentifier.toLowerCase()
+    : normalizePhone(rawIdentifier) || rawIdentifier.toLowerCase();
+  const retryAfter = checkLoginThrottle('customer-login', throttleKey);
+  if (retryAfter > 0) {
+    c.header('Retry-After', String(retryAfter));
+    return c.json(
+      {
+        success: false,
+        code: 'RATE_LIMITED',
+        message: 'অনেকবার ভুল প্রচেষ্টার কারণে লগইন সাময়িকভাবে সীমাবদ্ধ করা হয়েছে। কিছুক্ষণ পর আবার চেষ্টা করুন।',
+        retryAfterSeconds: retryAfter,
+      },
+      429
+    );
   }
 
+  const db = c.get('db');
+  const userRow = await findUserByIdentifier(db, rawIdentifier);
+
   if (!userRow || !userRow.passwordHash || !userRow.passwordSalt) {
+    recordLoginFailure('customer-login', throttleKey);
     return c.json({ success: false, message: 'মোবাইল নম্বর বা পাসওয়ার্ড সঠিক নয়।' }, 401);
   }
+
+  // Verify password BEFORE checking blocked status to avoid leaking account status to unauthenticated callers
+  const valid = await verifyPassword(password, userRow.passwordSalt, userRow.passwordHash);
+  if (!valid) {
+    recordLoginFailure('customer-login', throttleKey);
+    return c.json({ success: false, message: 'মোবাইল নম্বর বা পাসওয়ার্ড সঠিক নয়।' }, 401);
+  }
+
   if (userRow.status === 'blocked') {
     return c.json(
       { success: false, code: 'ACCOUNT_BLOCKED', message: 'আপনার অ্যাকাউন্টটি ব্লক করা হয়েছে।' },
@@ -189,10 +254,7 @@ authRouter.post('/login', authRateLimiter, async (c) => {
     );
   }
 
-  const valid = await verifyPassword(password, userRow.passwordSalt, userRow.passwordHash);
-  if (!valid) {
-    return c.json({ success: false, message: 'মোবাইল নম্বর বা পাসওয়ার্ড সঠিক নয়।' }, 401);
-  }
+  clearLoginFailures('customer-login', throttleKey);
 
   const role: AuthUser['role'] =
     userRow.role === 'admin' || userRow.role === 'super_admin' || userRow.role === 'sysadm'
@@ -214,29 +276,7 @@ authRouter.post('/login', authRateLimiter, async (c) => {
   return c.json({
     success: true,
     token,
-    user: {
-      id: userRow.id,
-      fullName: userRow.fullName,
-      phone: userRow.phone,
-      email: userRow.email || undefined,
-      role,
-      district: userRow.district || undefined,
-      upazila: userRow.upazila || undefined,
-      area: userRow.area || undefined,
-      fullAddress: userRow.fullAddress || undefined,
-      address: {
-        district: userRow.district || '',
-        upazila: userRow.upazila || '',
-        area: userRow.area || '',
-        fullAddress: userRow.fullAddress || '',
-      },
-      savedMeasurements: safeJsonParse(userRow.savedMeasurements, undefined),
-      walletBalance: userRow.walletBalance,
-      totalOrders: userRow.totalOrders,
-      totalSpent: userRow.totalSpent,
-      status: userRow.status,
-      createdAt: userRow.createdAt,
-    },
+    user: buildPublicCustomerPayload(userRow, role),
   });
 });
 
@@ -252,29 +292,7 @@ authRouter.get('/me', async (c) => {
   }
   return c.json({
     success: true,
-    user: {
-      id: userRow.id,
-      fullName: userRow.fullName,
-      phone: userRow.phone,
-      email: userRow.email,
-      role: userRow.role || 'user',
-      status: userRow.status,
-      district: userRow.district,
-      upazila: userRow.upazila,
-      area: userRow.area,
-      fullAddress: userRow.fullAddress,
-      address: {
-        district: userRow.district || '',
-        upazila: userRow.upazila || '',
-        area: userRow.area || '',
-        fullAddress: userRow.fullAddress || '',
-      },
-      savedMeasurements: safeJsonParse(userRow.savedMeasurements, undefined),
-      walletBalance: userRow.walletBalance,
-      totalOrders: userRow.totalOrders,
-      totalSpent: userRow.totalSpent,
-      createdAt: userRow.createdAt,
-    },
+    user: buildPublicCustomerPayload(userRow),
   });
 });
 
@@ -288,27 +306,13 @@ async function handleResetPasswordWithOtp(
 ) {
   const identifier = String(body.email || body.phone || body.identifier || '').trim();
   const otp = String(body.otp || body.code || '').trim();
-  const newPassword = String(body.newPassword || '').trim();
+  const newPassword = String(body.newPassword || '');
 
   if (!identifier) {
     return c.json({ success: false, message: 'ইমেইল বা মোবাইল নম্বর প্রদান করুন।' }, 400);
   }
-  if (newPassword.length < 6) {
+  if (!newPassword.trim() || newPassword.length < 6) {
     return c.json({ success: false, message: 'নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।' }, 400);
-  }
-
-  const db = c.get('db');
-  const allUsers = await db.select().from(users);
-  const cleanId = identifier.toLowerCase();
-  const cleanPhone = normalizePhone(cleanId);
-  const userRow = allUsers.find(
-    (u) =>
-      (u.email && u.email.toLowerCase() === cleanId) ||
-      (cleanPhone && normalizePhone(u.phone) === cleanPhone)
-  );
-
-  if (!userRow) {
-    return c.json({ success: false, message: 'এই ইমেইল বা ফোন নম্বরে কোনো অ্যাকাউন্ট পাওয়া যায়নি।' }, 404);
   }
   if (!otp) {
     return c.json(
@@ -321,25 +325,44 @@ async function handleResetPasswordWithOtp(
     );
   }
 
-  const candidateIdentifiers = new Set<string>(
-    [
-      cleanId,
-      cleanPhone,
-      userRow.email ? userRow.email.toLowerCase().trim() : '',
-      userRow.phone ? normalizePhone(userRow.phone) : '',
-      userRow.phone ? userRow.phone.trim().toLowerCase() : '',
-    ].filter(Boolean)
+  const db = c.get('db');
+  const userRow = await findUserByIdentifier(db, identifier);
+
+  if (!userRow) {
+    return c.json(
+      { success: false, message: 'ভেরিফিকেশন কোডটি সঠিক নয় বা মেয়াদোত্তীর্ণ হয়েছে।' },
+      400
+    );
+  }
+
+  const cleanId = identifier.toLowerCase();
+  const cleanPhone = normalizePhone(cleanId);
+  const candidateIdentifiers = Array.from(
+    new Set<string>(
+      [
+        cleanId,
+        cleanPhone,
+        userRow.email ? userRow.email.toLowerCase().trim() : '',
+        userRow.phone ? normalizePhone(userRow.phone) : '',
+        userRow.phone ? userRow.phone.trim().toLowerCase() : '',
+      ].filter(Boolean)
+    )
   );
 
-  const allOtpRows = await db.select().from(otpCodes);
-  const matchingOtpRows = allOtpRows
-    .filter(
-      (r) =>
-        r.purpose === 'password_reset' &&
-        !r.consumedAt &&
-        candidateIdentifiers.has(r.identifier.toLowerCase())
-    )
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const matchingOtpRows =
+    candidateIdentifiers.length > 0
+      ? await db
+          .select()
+          .from(otpCodes)
+          .where(
+            and(
+              eq(otpCodes.purpose, 'password_reset'),
+              isNull(otpCodes.consumedAt),
+              inArray(otpCodes.identifier, candidateIdentifiers)
+            )
+          )
+          .orderBy(desc(otpCodes.createdAt))
+      : [];
 
   const latestOtp = matchingOtpRows[0];
   if (!latestOtp || new Date(latestOtp.expiresAt).getTime() < Date.now()) {
@@ -366,6 +389,13 @@ async function handleResetPasswordWithOtp(
     return c.json({ success: false, message: 'প্রদত্ত ভেরিফিকেশন কোড (OTP) সঠিক নয়।' }, 400);
   }
 
+  if (userRow.status === 'blocked') {
+    return c.json(
+      { success: false, code: 'ACCOUNT_BLOCKED', message: 'আপনার অ্যাকাউন্টটি ব্লক করা হয়েছে।' },
+      403
+    );
+  }
+
   const nowIso = new Date().toISOString();
   await db
     .update(otpCodes)
@@ -381,6 +411,9 @@ async function handleResetPasswordWithOtp(
       updatedAt: nowIso,
     })
     .where(eq(users.id, userRow.id));
+
+  if (userRow.phone) clearLoginFailures('customer-login', normalizePhone(userRow.phone));
+  if (userRow.email) clearLoginFailures('customer-login', userRow.email.toLowerCase());
 
   // Primary: Email notification
   if (userRow.email && userRow.email.includes('@')) {
@@ -411,7 +444,7 @@ authRouter.post('/reset-password', authRateLimiter, async (c) => {
 authRouter.post('/forgot-password', authRateLimiter, async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const identifier = String(body.email || body.phone || body.identifier || '').trim();
-  const newPassword = String(body.newPassword || '').trim();
+  const newPassword = String(body.newPassword || '');
 
   if (newPassword) {
     return handleResetPasswordWithOtp(c, body);
@@ -422,46 +455,46 @@ authRouter.post('/forgot-password', authRateLimiter, async (c) => {
   }
 
   const db = c.get('db');
-  const allUsers = await db.select().from(users);
-  const cleanId = identifier.toLowerCase();
-  const cleanPhone = normalizePhone(cleanId);
-  const userRow = allUsers.find(
-    (u) =>
-      (u.email && u.email.toLowerCase() === cleanId) ||
-      (cleanPhone && normalizePhone(u.phone) === cleanPhone)
-  );
+  const userRow = await findUserByIdentifier(db, identifier);
 
-  if (!userRow) {
-    return c.json(
-      { success: false, message: 'এই ইমেইল বা ফোন নম্বরে কোনো অ্যাকাউন্ট পাওয়া যায়নি।' },
-      404
-    );
+  // Generic success response when user is missing or blocked to prevent account/status enumeration
+  if (!userRow || userRow.status === 'blocked') {
+    return c.json({
+      success: true,
+      requiresOtp: true,
+      message: 'যদি এই ইমেইল বা মোবাইল নম্বরে কোনো সক্রিয় অ্যাকাউন্ট থাকে, তবে ভেরিফিকেশন কোড (OTP) পাঠানো হয়েছে।',
+    });
   }
 
-  // Invalidate all previous unconsumed password_reset OTPs for this user
-  const candidateIdentifiers = new Set<string>(
-    [
-      cleanId,
-      cleanPhone,
-      userRow.email ? userRow.email.toLowerCase().trim() : '',
-      userRow.phone ? normalizePhone(userRow.phone) : '',
-      userRow.phone ? userRow.phone.trim().toLowerCase() : '',
-    ].filter(Boolean)
+  const cleanId = identifier.toLowerCase();
+  const cleanPhone = normalizePhone(cleanId);
+  const candidateIdentifiers = Array.from(
+    new Set<string>(
+      [
+        cleanId,
+        cleanPhone,
+        userRow.email ? userRow.email.toLowerCase().trim() : '',
+        userRow.phone ? normalizePhone(userRow.phone) : '',
+        userRow.phone ? userRow.phone.trim().toLowerCase() : '',
+      ].filter(Boolean)
+    )
   );
   const now = new Date();
   const nowIso = now.toISOString();
-  const allOtpRows = await db.select().from(otpCodes);
-  for (const oldOtp of allOtpRows) {
-    if (
-      oldOtp.purpose === 'password_reset' &&
-      !oldOtp.consumedAt &&
-      candidateIdentifiers.has(oldOtp.identifier.toLowerCase())
-    ) {
-      await db
-        .update(otpCodes)
-        .set({ consumedAt: nowIso })
-        .where(eq(otpCodes.id, oldOtp.id));
-    }
+
+  // Prune expired OTP codes & invalidate unconsumed password_reset OTPs for this account
+  await db.delete(otpCodes).where(lt(otpCodes.expiresAt, nowIso)).catch(() => {});
+  if (candidateIdentifiers.length > 0) {
+    await db
+      .update(otpCodes)
+      .set({ consumedAt: nowIso })
+      .where(
+        and(
+          eq(otpCodes.purpose, 'password_reset'),
+          isNull(otpCodes.consumedAt),
+          inArray(otpCodes.identifier, candidateIdentifiers)
+        )
+      );
   }
 
   // OTP Code Generation (10-minute expiry)
@@ -469,16 +502,17 @@ authRouter.post('/forgot-password', authRateLimiter, async (c) => {
   const { salt, hash } = await hashPassword(code);
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
 
-  const primaryEmail = (userRow?.email && userRow.email.includes('@'))
+  const primaryEmail = (userRow.email && userRow.email.includes('@'))
     ? userRow.email.trim()
     : (cleanId.includes('@') ? cleanId : '');
 
-  const secondaryPhone = userRow?.phone
+  const secondaryPhone = userRow.phone
     ? normalizePhone(userRow.phone) || userRow.phone.trim()
     : (!cleanId.includes('@') ? cleanPhone || cleanId : '');
 
+  const otpId = `otp-${crypto.randomUUID()}`;
   await db.insert(otpCodes).values({
-    id: `otp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    id: otpId,
     identifier: (primaryEmail || secondaryPhone || cleanId).toLowerCase(),
     codeHash: `${salt}:${hash}`,
     purpose: 'password_reset',
@@ -529,6 +563,18 @@ authRouter.post('/forgot-password', authRateLimiter, async (c) => {
     c.env?.NODE_ENV !== 'production' &&
     (hostname === 'localhost' || hostname === '127.0.0.1');
 
+  if (!emailDelivered && !smsDelivered && !isLocalDev) {
+    await db.delete(otpCodes).where(eq(otpCodes.id, otpId)).catch(() => {});
+    return c.json(
+      {
+        success: false,
+        code: 'OTP_DELIVERY_FAILED',
+        message: 'এই মুহূর্তে ইমেইল বা SMS-এর মাধ্যমে ভেরিফিকেশন কোড পাঠানো যায়নি। অনুগ্রহ করে সাপোর্টে যোগাযোগ করুন।',
+      },
+      503
+    );
+  }
+
   return c.json({
     success: true,
     requiresOtp: true,
@@ -550,9 +596,9 @@ authRouter.post('/change-password', authRateLimiter, async (c) => {
 
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const currentPassword = String(body.currentPassword || '');
-  const newPassword = String(body.newPassword || '').trim();
+  const newPassword = String(body.newPassword || '');
 
-  if (newPassword.length < 6) {
+  if (!newPassword.trim() || newPassword.length < 6) {
     return c.json({ success: false, message: 'নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।' }, 400);
   }
 
@@ -561,12 +607,23 @@ authRouter.post('/change-password', authRateLimiter, async (c) => {
   if (!userRow) {
     return c.json({ success: false, message: 'অ্যাকাউন্ট খুঁজে পাওয়া যায়নি।' }, 404);
   }
+  if (userRow.status === 'blocked') {
+    return c.json(
+      { success: false, code: 'ACCOUNT_BLOCKED', message: 'আপনার অ্যাকাউন্টটি ব্লক করা হয়েছে।' },
+      403
+    );
+  }
 
-  if (userRow.passwordHash && userRow.passwordSalt) {
-    const valid = await verifyPassword(currentPassword, userRow.passwordSalt, userRow.passwordHash);
-    if (!currentPassword || !valid) {
-      return c.json({ success: false, message: 'বর্তমান পাসওয়ার্ড সঠিক নয়।' }, 400);
-    }
+  if (!userRow.passwordHash || !userRow.passwordSalt) {
+    return c.json(
+      { success: false, message: 'পাসওয়ার্ড পরিবর্তন করতে OTP রিসেট ব্যবহার করুন।' },
+      400
+    );
+  }
+
+  const valid = await verifyPassword(currentPassword, userRow.passwordSalt, userRow.passwordHash);
+  if (!currentPassword || !valid) {
+    return c.json({ success: false, message: 'বর্তমান পাসওয়ার্ড সঠিক নয়।' }, 400);
   }
 
   const { salt, hash } = await hashPassword(newPassword);
@@ -611,6 +668,20 @@ adminAuthRouter.post('/login', authRateLimiter, async (c) => {
     );
   }
 
+  const retryAfter = checkLoginThrottle('admin-login', email);
+  if (retryAfter > 0) {
+    c.header('Retry-After', String(retryAfter));
+    return c.json(
+      {
+        success: false,
+        code: 'RATE_LIMITED',
+        message: 'অনেকবার ভুল প্রচেষ্টার কারণে অ্যাডমিন লগইন সাময়িকভাবে সীমাবদ্ধ করা হয়েছে।',
+        retryAfterSeconds: retryAfter,
+      },
+      429
+    );
+  }
+
   const db = c.get('db');
   const row = await db
     .select()
@@ -624,11 +695,14 @@ adminAuthRouter.post('/login', authRateLimiter, async (c) => {
     email !== admin.email.toLowerCase() ||
     !(await verifyPassword(password, admin.passwordSalt, admin.passwordHash))
   ) {
+    recordLoginFailure('admin-login', email);
     return c.json(
       { success: false, message: 'অ্যাডমিন ইমেইল অথবা পাসওয়ার্ড সঠিক নয়।' },
       401
     );
   }
+
+  clearLoginFailures('admin-login', email);
 
   const token = await signJwt(
     {
@@ -710,8 +784,11 @@ adminAuthRouter.post('/change-password', async (c) => {
   if (!currentPassword || !valid) {
     return c.json({ success: false, message: 'বর্তমান পাসওয়ার্ড সঠিক নয়।' }, 400);
   }
-  if (newPassword && newPassword.length < 6) {
+  if (newPassword && (!newPassword.trim() || newPassword.length < 6)) {
     return c.json({ success: false, message: 'নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।' }, 400);
+  }
+  if (newEmail && !EMAIL_RE.test(newEmail)) {
+    return c.json({ success: false, message: 'সঠিক অ্যাডমিন ইমেইল ঠিকানা প্রদান করুন।' }, 400);
   }
 
   if (newPassword) {
@@ -719,7 +796,7 @@ adminAuthRouter.post('/change-password', async (c) => {
     admin.passwordSalt = salt;
     admin.passwordHash = hash;
   }
-  if (newEmail && newEmail.includes('@')) admin.email = newEmail;
+  if (newEmail) admin.email = newEmail;
   if (newName) admin.name = newName;
   admin.updatedAt = new Date().toISOString();
 

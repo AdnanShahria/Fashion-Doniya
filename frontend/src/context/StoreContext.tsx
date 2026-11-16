@@ -97,12 +97,25 @@ interface StoreContextType {
   showToast: (text: string, type?: 'success' | 'info' | 'error') => void;
   openQuickView: (product: Product) => void;
   closeQuickView: () => void;
-  loginDemoUser: (phone: string, fullName: string) => void;
-  loginUser: (identifier: string, password: string) => Promise<boolean>;
-  registerUser: (fullName: string, phone: string, password: string, email?: string) => Promise<boolean>;
-  requestPasswordResetOtp: (identifier: string) => Promise<{ success: boolean; devOtp?: string; message?: string }>;
-  resetPassword: (identifier: string, newPassword: string, otp?: string) => Promise<boolean>;
-  changeUserPassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
+  loginUser: (identifier: string, password: string) => Promise<{ success: boolean; message?: string }>;
+  registerUser: (
+    fullName: string,
+    phone: string,
+    password: string,
+    email?: string
+  ) => Promise<{ success: boolean; message?: string }>;
+  requestPasswordResetOtp: (
+    identifier: string
+  ) => Promise<{ success: boolean; devOtp?: string; message?: string }>;
+  resetPassword: (
+    identifier: string,
+    newPassword: string,
+    otp?: string
+  ) => Promise<{ success: boolean; message?: string }>;
+  changeUserPassword: (
+    currentPassword: string,
+    newPassword: string
+  ) => Promise<{ success: boolean; message?: string }>;
   applyCoupon: (code: string, subtotalOverride?: number) => boolean;
   clearCoupon: (silent?: boolean) => void;
   logoutUser: () => void;
@@ -319,7 +332,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const [currentUser, setCurrentUser] = useState<CustomerUser | null>(() => {
     StorageService.initialize();
-    return getCustomerAuthToken() ? StorageService.getCurrentUser() : null;
+    if (!getCustomerAuthToken()) return null;
+    return StorageService.getCurrentUser() || useAuthStore.getState().user;
   });
 
   const [lastCompletedOrder, setLastCompletedOrderState] = useState<Order | null>(() => {
@@ -359,7 +373,9 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   useEffect(() => {
     StorageService.setCurrentUser(currentUser);
-    useAuthStore.getState().setAuth(currentUser);
+    if (currentUser) {
+      useAuthStore.getState().setAuth(currentUser);
+    }
   }, [currentUser]);
 
   useEffect(() => {
@@ -934,19 +950,10 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setQuickViewProduct(null);
   };
 
-  const loginDemoUser = (phone: string, fullName: string) => {
-    const user: CustomerUser = {
-      id: `usr-${Date.now()}`,
-      fullName,
-      phone,
-      email: `${phone}@example.com`,
-      createdAt: new Date().toISOString()
-    };
-    setCurrentUser(user);
-    showToast(`স্বাগতম, ${fullName}! লগইন সম্পন্ন হয়েছে।`, 'success');
-  };
-
-  const loginUser = async (identifier: string, password: string): Promise<boolean> => {
+  const loginUser = async (
+    identifier: string,
+    password: string
+  ): Promise<{ success: boolean; message?: string }> => {
     try {
       const r = await api.post('/auth/login', {
         identifier,
@@ -954,35 +961,25 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         email: identifier,
         password,
       });
-      if (r.data?.success && r.data.user) {
+      if (r.data?.success && r.data.user && r.data.token) {
         useAuthStore.getState().setAuth(r.data.user, r.data.token);
         setCurrentUser(r.data.user);
         StorageService.setCurrentUser(r.data.user);
-        showToast(r.data.message || `স্বাগতম, ${r.data.user.fullName}!`, 'success');
-        return true;
+        const msg = r.data.message || `স্বাগতম, ${r.data.user.fullName}!`;
+        showToast(msg, 'success');
+        return { success: true, message: msg };
       }
-      showToast(r.data?.message || 'মোবাইল নম্বর/ইমেইল বা পাসওয়ার্ড সঠিক নয়।', 'error');
-      return false;
+      const msg = r.data?.message || 'মোবাইল নম্বর/ইমেইল বা পাসওয়ার্ড সঠিক নয়।';
+      showToast(msg, 'error');
+      return { success: false, message: msg };
     } catch (err: unknown) {
       const errObj = err as { response?: { status?: number; data?: { message?: string } } };
-      if (errObj?.response) {
-        const msg =
-          errObj.response.data?.message || 'মোবাইল নম্বর/ইমেইল বা পাসওয়ার্ড সঠিক নয়।';
-        showToast(msg, 'error');
-        return false;
-      }
+      const msg = errObj?.response
+        ? errObj.response.data?.message || 'মোবাইল নম্বর/ইমেইল বা পাসওয়ার্ড সঠিক নয়।'
+        : 'সার্ভারে সংযোগ করা যায়নি। অনুগ্রহ করে পরে আবার চেষ্টা করুন।';
+      showToast(msg, 'error');
+      return { success: false, message: msg };
     }
-
-    // Local / Offline fallback (only when server is unreachable)
-    const res = StorageService.authenticateUser(identifier, password);
-    if (res.success && res.user) {
-      setCurrentUser(res.user);
-      useAuthStore.getState().setAuth(res.user);
-      showToast(res.message, 'success');
-      return true;
-    }
-    showToast(res.message, 'error');
-    return false;
   };
 
   const registerUser = async (
@@ -990,7 +987,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     phone: string,
     password: string,
     email?: string
-  ): Promise<boolean> => {
+  ): Promise<{ success: boolean; message?: string }> => {
     try {
       const r = await api.post('/auth/register', {
         fullName,
@@ -998,34 +995,25 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         password,
         ...(email?.trim() ? { email: email.trim() } : {}),
       });
-      if (r.data?.success && r.data.user) {
+      if (r.data?.success && r.data.user && r.data.token) {
         useAuthStore.getState().setAuth(r.data.user, r.data.token);
         setCurrentUser(r.data.user);
         StorageService.setCurrentUser(r.data.user);
-        showToast(r.data.message || `রেজিস্ট্রেশন সফল হয়েছে! স্বাগতম, ${r.data.user.fullName}!`, 'success');
-        return true;
+        const msg = r.data.message || `রেজিস্ট্রেশন সফল হয়েছে! স্বাগতম, ${r.data.user.fullName}!`;
+        showToast(msg, 'success');
+        return { success: true, message: msg };
       }
-      showToast(r.data?.message || 'রেজিস্ট্রেশন সম্পন্ন করা যায়নি।', 'error');
-      return false;
+      const msg = r.data?.message || 'রেজিস্ট্রেশন সম্পন্ন করা যায়নি।';
+      showToast(msg, 'error');
+      return { success: false, message: msg };
     } catch (err: unknown) {
       const errObj = err as { response?: { status?: number; data?: { message?: string } } };
-      if (errObj?.response) {
-        const msg = errObj.response.data?.message || 'রেজিস্ট্রেশন সম্পন্ন করা যায়নি।';
-        showToast(msg, 'error');
-        return false;
-      }
+      const msg = errObj?.response
+        ? errObj.response.data?.message || 'রেজিস্ট্রেশন সম্পন্ন করা যায়নি।'
+        : 'সার্ভারে সংযোগ করা যায়নি। অনুগ্রহ করে পরে আবার চেষ্টা করুন।';
+      showToast(msg, 'error');
+      return { success: false, message: msg };
     }
-
-    // Local / Offline fallback (only when server is unreachable)
-    const res = StorageService.registerUser(fullName, phone, password);
-    if (res.success && res.user) {
-      setCurrentUser(res.user);
-      useAuthStore.getState().setAuth(res.user);
-      showToast(res.message, 'success');
-      return true;
-    }
-    showToast(res.message, 'error');
-    return false;
   };
 
   const applyCoupon = (code: string, subtotalOverride?: number): boolean => {
@@ -1078,7 +1066,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     identifier: string,
     newPassword: string,
     otp?: string
-  ): Promise<boolean> => {
+  ): Promise<{ success: boolean; message?: string }> => {
     try {
       const r = await api.post('/auth/reset-password', {
         identifier,
@@ -1089,53 +1077,47 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         newPassword,
       });
       if (r.data?.success) {
-        showToast(r.data.message || 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!', 'success');
-        return true;
+        const msg = r.data.message || 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!';
+        showToast(msg, 'success');
+        return { success: true, message: msg };
       }
-      showToast(r.data?.message || 'পাসওয়ার্ড রিসেট করা যায়নি।', 'error');
-      return false;
+      const msg = r.data?.message || 'পাসওয়ার্ড রিসেট করা যায়নি।';
+      showToast(msg, 'error');
+      return { success: false, message: msg };
     } catch (err: unknown) {
       const errObj = err as { response?: { data?: { message?: string } } };
-      if (errObj?.response) {
-        const msg = errObj.response.data?.message || 'পাসওয়ার্ড রিসেট করা যায়নি।';
-        showToast(msg, 'error');
-        return false;
-      }
+      const msg = errObj?.response
+        ? errObj.response.data?.message || 'পাসওয়ার্ড রিসেট করা যায়নি।'
+        : 'সার্ভারে সংযোগ করা যায়নি। অনুগ্রহ করে পরে আবার চেষ্টা করুন।';
+      showToast(msg, 'error');
+      return { success: false, message: msg };
     }
-
-    if (!otp) {
-      const res = StorageService.resetUserPassword(identifier, newPassword);
-      if (res.success) {
-        showToast(res.message, 'success');
-        return true;
-      }
-      showToast(res.message, 'error');
-    }
-    return false;
   };
 
   const changeUserPassword = async (
     currentPassword: string,
     newPassword: string
-  ): Promise<boolean> => {
+  ): Promise<{ success: boolean; message?: string }> => {
     try {
       const r = await api.post('/auth/change-password', { currentPassword, newPassword });
       if (r.data?.success) {
         if (r.data?.token) {
           useAuthStore.getState().setAuth(currentUser, r.data.token);
         }
-        showToast(r.data.message || 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!', 'success');
-        return true;
+        const msg = r.data.message || 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!';
+        showToast(msg, 'success');
+        return { success: true, message: msg };
       }
+      const msg = r.data?.message || 'পাসওয়ার্ড পরিবর্তন করা যায়নি।';
+      showToast(msg, 'error');
+      return { success: false, message: msg };
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      if (msg) {
-        showToast(msg, 'error');
-        return false;
-      }
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'পাসওয়ার্ড পরিবর্তন করা যায়নি। অনুগ্রহ করে পুনরায় লগইন করে চেষ্টা করুন।';
+      showToast(msg, 'error');
+      return { success: false, message: msg };
     }
-    showToast('পাসওয়ার্ড পরিবর্তন করা যায়নি। অনুগ্রহ করে পুনরায় লগইন করে চেষ্টা করুন।', 'error');
-    return false;
   };
 
   const logoutUser = () => {
@@ -1181,17 +1163,9 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       fullAddress: profile.fullAddress ?? mergedAddress?.fullAddress ?? currentUser.fullAddress,
     };
 
+    const previousUser = currentUser;
     setCurrentUser(updated);
     StorageService.setCurrentUser(updated);
-
-    const saved = StorageService.getSavedUsers();
-    const idx = saved.findIndex(
-      (u) => StorageService.normalizePhone(u.phone) === StorageService.normalizePhone(updated.phone)
-    );
-    if (idx >= 0) {
-      saved[idx] = { ...saved[idx], ...updated };
-      StorageService.setSavedUsers([...saved]);
-    }
 
     api
       .post<{ success?: boolean; customer?: CustomerUser; message?: string }>('/customers/sync', {
@@ -1210,12 +1184,12 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         showToast('প্রোফাইল তথ্য আপডেট করা হয়েছে', 'success');
       })
       .catch((err: unknown) => {
-        const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-        if (msg) {
-          showToast(msg, 'error');
-        } else {
-          showToast('প্রোফাইল তথ্য আপডেট করা হয়েছে', 'success');
-        }
+        setCurrentUser(previousUser);
+        StorageService.setCurrentUser(previousUser);
+        const msg =
+          (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+          'সার্ভারে সংযোগ করা যায়নি। প্রোফাইল তথ্য সংরক্ষণ করা যায়নি।';
+        showToast(msg, 'error');
       });
   };
 
@@ -1262,7 +1236,6 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       showToast,
       openQuickView,
       closeQuickView,
-      loginDemoUser,
       loginUser,
       registerUser,
       requestPasswordResetOtp,

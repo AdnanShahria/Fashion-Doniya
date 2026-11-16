@@ -136,3 +136,40 @@ export const pollingRateLimiter = createRateLimiter({
   windowMs: 60_000,
   maxRequests: 60,
 });
+
+const LOGIN_FAILURE_WINDOW_MS = 15 * 60_000;
+const MAX_LOGIN_FAILURES = 10;
+const loginFailures = new Map<string, { count: number; resetAt: number }>();
+
+export function checkLoginThrottle(scope: string, identifier: string): number {
+  const key = `${scope}:${identifier.trim().toLowerCase()}`;
+  const entry = loginFailures.get(key);
+  if (!entry) return 0;
+  const now = Date.now();
+  if (entry.resetAt <= now) {
+    loginFailures.delete(key);
+    return 0;
+  }
+  if (entry.count >= MAX_LOGIN_FAILURES) {
+    return Math.max(1, Math.ceil((entry.resetAt - now) / 1000));
+  }
+  return 0;
+}
+
+export function recordLoginFailure(scope: string, identifier: string): void {
+  const key = `${scope}:${identifier.trim().toLowerCase()}`;
+  const now = Date.now();
+  const existing = loginFailures.get(key);
+  if (!existing || existing.resetAt <= now) {
+    enforceMapCap(loginFailures);
+    loginFailures.set(key, { count: 1, resetAt: now + LOGIN_FAILURE_WINDOW_MS });
+    return;
+  }
+  existing.count += 1;
+  loginFailures.set(key, existing);
+}
+
+export function clearLoginFailures(scope: string, identifier: string): void {
+  const key = `${scope}:${identifier.trim().toLowerCase()}`;
+  loginFailures.delete(key);
+}

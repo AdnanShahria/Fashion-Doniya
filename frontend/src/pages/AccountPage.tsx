@@ -35,6 +35,7 @@ export const AccountPage: React.FC = () => {
     logoutUser,
     updateUserProfile,
     navigateTo,
+    showToast,
   } = useStore();
 
   const location = useLocation();
@@ -239,11 +240,13 @@ export const AccountPage: React.FC = () => {
       const targetResetId = rawReset.includes('@')
         ? rawReset.toLowerCase()
         : StorageService.normalizePhone(rawReset) || rawReset;
-      const ok = await resetPassword(targetResetId, newPassword, resetOtp.trim());
-      if (!ok) {
+      const resetRes = await resetPassword(targetResetId, newPassword, resetOtp.trim());
+      if (!resetRes.success) {
         setFeedback({
           type: 'error',
-          text: 'OTP কোডটি সঠিক নয় অথবা মেয়াদ শেষ হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।',
+          text:
+            resetRes.message ||
+            'OTP কোডটি সঠিক নয় অথবা মেয়াদ শেষ হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।',
         });
         return;
       }
@@ -262,11 +265,27 @@ export const AccountPage: React.FC = () => {
 
     // 2. Register Flow
     if (authTab === 'register') {
+      if (regName.trim().length < 2) {
+        setFeedback({ type: 'error', text: 'অনুগ্রহ করে আপনার পুরো নাম লিখুন' });
+        return;
+      }
+      const normalizedRegPhone = StorageService.normalizePhone(regPhone);
+      if (!/^01[3-9]\d{8}$/.test(normalizedRegPhone)) {
+        setFeedback({
+          type: 'error',
+          text: 'সঠিক ১১ ডিজিটের বাংলাদেশী মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)',
+        });
+        return;
+      }
       if (regEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail.trim().toLowerCase())) {
         setFeedback({
           type: 'error',
           text: 'সঠিক ইমেইল ঠিকানা দিন অথবা ঘরটি ফাঁকা রাখুন।',
         });
+        return;
+      }
+      if (!regPassword.trim() || regPassword.length < 6) {
+        setFeedback({ type: 'error', text: 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে' });
         return;
       }
       if (regPassword !== regConfirmPassword) {
@@ -276,20 +295,13 @@ export const AccountPage: React.FC = () => {
         });
         return;
       }
-      const ok = await registerUser(regName, regPhone, regPassword, regEmail);
-      if (!ok) {
-        const normalized = StorageService.normalizePhone(regPhone);
-        const isValidPhone = /^01[3-9]\d{8}$/.test(normalized);
+      const regRes = await registerUser(regName, normalizedRegPhone, regPassword, regEmail);
+      if (!regRes.success) {
         setFeedback({
           type: 'error',
           text:
-            regName.trim().length < 2
-              ? 'অনুগ্রহ করে আপনার পুরো নাম লিখুন'
-              : !isValidPhone
-              ? 'সঠিক ১১ ডিজিটের বাংলাদেশী মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)'
-              : regPassword.trim().length < 6
-              ? 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে'
-              : 'এই মোবাইল নম্বর বা ইমেইল দিয়ে ইতিমধ্যে অ্যাকাউন্ট খোলা আছে অথবা তথ্য সঠিক নয়।',
+            regRes.message ||
+            'এই মোবাইল নম্বর বা ইমেইল দিয়ে ইতিমধ্যে অ্যাকাউন্ট খোলা আছে অথবা তথ্য সঠিক নয়।',
         });
       }
       return;
@@ -327,11 +339,13 @@ export const AccountPage: React.FC = () => {
       return;
     }
 
-    const ok = await loginUser(normalizedLoginId, loginPassword);
-    if (!ok) {
+    const loginRes = await loginUser(normalizedLoginId, loginPassword);
+    if (!loginRes.success) {
       setFeedback({
         type: 'error',
-        text: 'মোবাইল নম্বর/ইমেইল বা পাসওয়ার্ড সঠিক নয়। অনুগ্রহ করে পুনরায় চেষ্টা করুন।',
+        text:
+          loginRes.message ||
+          'মোবাইল নম্বর/ইমেইল বা পাসওয়ার্ড সঠিক নয়। অনুগ্রহ করে পুনরায় চেষ্টা করুন।',
       });
     }
   };
@@ -349,9 +363,14 @@ export const AccountPage: React.FC = () => {
 
   const handleSaveAddress = (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanEmail = profileEmail.trim().toLowerCase();
+    if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      showToast('অনুগ্রহ করে সঠিক ইমেইল ঠিকানা লিখুন।', 'error');
+      return;
+    }
     updateUserProfile({
       fullName: profileName.trim() || currentUser?.fullName,
-      email: profileEmail.trim() || undefined,
+      email: cleanEmail || undefined,
       district: district.trim(),
       upazila: upazila.trim(),
       fullAddress: fullAddress.trim(),
@@ -367,11 +386,12 @@ export const AccountPage: React.FC = () => {
   const handleProfilePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
-    if (profileNewPassword.trim().length < 6) {
+    if (!profileNewPassword.trim() || profileNewPassword.length < 6) {
+      showToast('নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।', 'error');
       return;
     }
-    const ok = await changeUserPassword(profileCurrentPassword, profileNewPassword);
-    if (ok) {
+    const res = await changeUserPassword(profileCurrentPassword, profileNewPassword);
+    if (res.success) {
       setProfileCurrentPassword('');
       setProfileNewPassword('');
     }
@@ -411,7 +431,7 @@ export const AccountPage: React.FC = () => {
                 </div>
               </div>
 
-              {!isForgotPassword && authTab === 'login' && (
+              {import.meta.env.DEV && !isForgotPassword && authTab === 'login' && (
                 <button
                   type="button"
                   onClick={handleFillDemoCredentials}
@@ -512,7 +532,10 @@ export const AccountPage: React.FC = () => {
                         value={resetIdentifier}
                         onChange={(e) => {
                           setResetIdentifier(e.target.value);
-                          if (otpSent) {
+                          const isDirectResetRoute =
+                            cleanInitialPath === '/reset-password' ||
+                            cleanInitialPath === '/account/reset-password';
+                          if (otpSent && !isDirectResetRoute) {
                             setOtpSent(false);
                             setResetOtp('');
                           }
@@ -721,7 +744,7 @@ export const AccountPage: React.FC = () => {
                         onChange={(e) => setRegConfirmPassword(e.target.value)}
                         placeholder="পুনরায় পাসওয়ার্ড লিখুন"
                         required
-                        minLength={4}
+                        minLength={6}
                         className="w-full px-2.5 py-2 text-xs font-medium text-[#241614] placeholder:text-[#8C7A72] bg-transparent outline-none"
                       />
                       <button

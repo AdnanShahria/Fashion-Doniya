@@ -3,16 +3,19 @@ import type { AppEnv, Bindings } from '../types';
 import { constantTimeEqual, signJwt, verifyJwt } from './auth-helper';
 
 export const SYSADM_EMAIL = 'sysadm@fashiondoniyabd.com';
-
-let cachedEphemeralSecret: string | null = null;
+const DEV_FALLBACK_SYSADM_SECRET = 'dev-fashion-doniya-sysadm-secret-change-in-production-64chars';
 
 function resolveSysadmSecret(env: Bindings): string {
   const configured = String(env?.SYSADM_SECRET || '').trim();
-  if (configured.length >= 16) return configured;
-  if (!cachedEphemeralSecret) {
-    cachedEphemeralSecret = crypto.randomUUID() + '-' + crypto.randomUUID();
+  const isProd = env?.NODE_ENV === 'production' || Boolean(env?.DB);
+  if (isProd && configured.length < 32) {
+    throw new Error('SYSADM_SECRET must be set and at least 32 characters in production.');
   }
-  return cachedEphemeralSecret;
+  if (configured.length >= 16) return configured;
+  if (isProd) {
+    throw new Error('SYSADM_SECRET must be set and at least 32 characters in production.');
+  }
+  return DEV_FALLBACK_SYSADM_SECRET;
 }
 
 export function getSysadmEmail(env: Bindings): string {

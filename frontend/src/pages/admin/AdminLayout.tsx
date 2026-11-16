@@ -83,11 +83,27 @@ export const AdminLayout: React.FC = () => {
   const [authSession, setAuthSession] = useState<AdminSessionData | null>(() => {
     try {
       const raw = localStorage.getItem(ADMIN_SESSION_STORAGE_KEY);
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw) as AdminSessionData;
+        if (parsed && typeof parsed.token === 'string' && parsed.token.trim().length > 0 && parsed.admin) {
+          return parsed;
+        }
+        localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+      }
     } catch {
       // ignore
     }
     return null;
+  });
+  const [isVerifyingSession, setIsVerifyingSession] = useState<boolean>(() => {
+    try {
+      const raw = localStorage.getItem(ADMIN_SESSION_STORAGE_KEY);
+      if (!raw) return false;
+      const parsed = JSON.parse(raw) as AdminSessionData;
+      return Boolean(parsed?.token && parsed.token.trim().length > 0);
+    } catch {
+      return false;
+    }
   });
 
   const [loginEmail, setLoginEmail] = useState('');
@@ -135,6 +151,7 @@ export const AdminLayout: React.FC = () => {
     window.addEventListener('admin-api-error', handleApiError);
 
     if (authSession?.token) {
+      setIsVerifyingSession(true);
       api
         .get('/admin/auth/me')
         .then((res) => {
@@ -146,7 +163,12 @@ export const AdminLayout: React.FC = () => {
         })
         .catch(() => {
           // 401 listener clears expired session automatically
+        })
+        .finally(() => {
+          setIsVerifyingSession(false);
         });
+    } else {
+      setIsVerifyingSession(false);
     }
 
     return () => {
@@ -207,11 +229,12 @@ export const AdminLayout: React.FC = () => {
   };
 
   useEffect(() => {
+    if (!authSession?.token || isVerifyingSession) return;
     refreshBadges();
     const handler = () => refreshBadges();
     window.addEventListener('admin-stats-updated', handler);
     return () => window.removeEventListener('admin-stats-updated', handler);
-  }, [authSession?.token, products]);
+  }, [authSession?.token, isVerifyingSession, products]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -255,7 +278,7 @@ export const AdminLayout: React.FC = () => {
 
   const handlePasswordChangeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentPassword || !newPassword || newPassword.length < 6) {
+    if (!currentPassword || !newPassword.trim() || newPassword.length < 6) {
       showToast('নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে', 'error');
       return;
     }
@@ -273,14 +296,18 @@ export const AdminLayout: React.FC = () => {
       setIsPasswordModalOpen(false);
       setCurrentPassword('');
       setNewPassword('');
-      if (authSession && data?.admin) {
-        const updated = { ...authSession, admin: data.admin };
+      if (authSession && (data?.admin || data?.token)) {
+        const updated: AdminSessionData = {
+          token: data.token || authSession.token,
+          admin: data.admin || authSession.admin,
+        };
         setAuthSession(updated);
         localStorage.setItem(ADMIN_SESSION_STORAGE_KEY, JSON.stringify(updated));
       }
       showToast('অ্যাডমিন পাসওয়ার্ড সফলভাবে পরিবর্তিত হয়েছে!', 'success');
-    } catch {
-      showToast('পাসওয়ার্ড পরিবর্তন করা যায়নি', 'error');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      showToast(msg || 'পাসওয়ার্ড পরিবর্তন করা যায়নি', 'error');
     }
   };
 
@@ -415,8 +442,17 @@ export const AdminLayout: React.FC = () => {
       .filter((g) => g.items.length > 0);
   }, [menuGroups, quickFilter]);
 
+  if (isVerifyingSession) {
+    return (
+      <div className="min-h-screen bg-[#FAF8F4] flex flex-col justify-center items-center p-4">
+        <div className="w-8 h-8 border-2 border-[#850B1B] border-t-transparent rounded-full animate-spin" />
+        <p className="mt-3 text-xs font-semibold text-[#242424]/70">অ্যাডমিন সেশন যাচাই করা হচ্ছে...</p>
+      </div>
+    );
+  }
+
   // Protected Login Gate if not authenticated
-  if (!authSession) {
+  if (!authSession || !authSession.token) {
     return (
       <div className="min-h-screen bg-[#FAF8F4] flex flex-col justify-center items-center p-4 relative overflow-hidden">
         <div className="pointer-events-none absolute -top-28 -right-28 w-80 h-80 rounded-full bg-[#C5A46D]/15 blur-3xl" />

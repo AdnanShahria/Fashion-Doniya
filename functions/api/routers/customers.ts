@@ -114,6 +114,23 @@ customersRouter.post('/sync', async (c) => {
 
   const db = c.get('db');
   const normPhone = normalizePhone(user.phone);
+  if (!isAdmin && !/^01[3-9]\d{8}$/.test(normPhone)) {
+    return c.json(
+      { success: false, message: 'সঠিক ১১ ডিজিটের মোবাইল নম্বর প্রদান করুন (01XXXXXXXXX)।' },
+      400
+    );
+  }
+
+  const normalizedEmail =
+    user.email !== undefined
+      ? user.email
+        ? String(user.email).trim().toLowerCase()
+        : null
+      : undefined;
+  if (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    return c.json({ success: false, message: 'সঠিক ইমেইল ঠিকানা প্রদান করুন।' }, 400);
+  }
+
   const allRows = await db.select().from(users);
 
   const existing = !isAdmin
@@ -143,6 +160,19 @@ customersRouter.post('/sync', async (c) => {
     }
   }
 
+  if (normalizedEmail) {
+    const ownerId = existing?.id || (!isAdmin ? authUser!.id : user.id);
+    const emailConflict = allRows.find(
+      (u) => u.email && u.email.trim().toLowerCase() === normalizedEmail && u.id !== ownerId
+    );
+    if (emailConflict) {
+      return c.json(
+        { success: false, message: 'এই ইমেইল ঠিকানায় ইতিমধ্যেই একটি অ্যাকাউন্ট রয়েছে।' },
+        409
+      );
+    }
+  }
+
   if (existing && existing.status === 'blocked') {
     return c.json(
       { success: false, code: 'ACCOUNT_BLOCKED', message: 'আপনার অ্যাকাউন্টটি ব্লক করা হয়েছে।' },
@@ -156,8 +186,8 @@ customersRouter.post('/sync', async (c) => {
       .update(users)
       .set({
         fullName: user.fullName || existing.fullName,
-        phone: normPhone,
-        email: user.email ?? existing.email,
+        phone: normPhone || existing.phone,
+        email: normalizedEmail !== undefined ? normalizedEmail : existing.email,
         district: user.district ?? user.address?.district ?? existing.district,
         upazila: user.upazila ?? user.address?.upazila ?? existing.upazila,
         area: user.address?.area ?? existing.area,
@@ -178,7 +208,7 @@ customersRouter.post('/sync', async (c) => {
     id: newId,
     fullName: user.fullName || 'Customer',
     phone: normPhone,
-    email: user.email || null,
+    email: normalizedEmail || null,
     role: 'user',
     status: 'active',
     district: user.district || user.address?.district || null,

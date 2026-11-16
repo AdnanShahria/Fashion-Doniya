@@ -46,11 +46,15 @@ export async function constantTimeEqual(a: string, b: string): Promise<boolean> 
 
 export function resolveJwtSecret(env: Bindings): string {
   const secret = String(env?.JWT_SECRET || '').trim();
-  const isProd = env?.NODE_ENV === 'production';
+  const isProd = env?.NODE_ENV === 'production' || Boolean(env?.DB);
   if (isProd && secret.length < 32) {
     throw new Error('JWT_SECRET must be set and at least 32 characters in production.');
   }
-  return secret.length >= 16 ? secret : DEV_FALLBACK_JWT_SECRET;
+  if (secret.length >= 16) return secret;
+  if (isProd) {
+    throw new Error('JWT_SECRET must be set and at least 32 characters in production.');
+  }
+  return DEV_FALLBACK_JWT_SECRET;
 }
 
 export async function hashPassword(
@@ -199,14 +203,11 @@ export async function resolveAuthContext(c: Context<AppEnv>): Promise<{
   isDemo: boolean;
 }> {
   const env = c.env;
-  // Security Hardening: Static admin keys must only be accepted via secure headers
-  // to prevent leaking secrets in browser history, proxy logs, and Referer headers.
-  // Query param token is strictly scoped to GET /stream (browser EventSource limitations).
-  const isSseStreamRoute = c.req.path.includes('/stream');
+  // Security Hardening: Static admin keys and JWTs must only be accepted via headers,
+  // never via URL query parameters (prevents leaking tokens in browser history and logs).
   const adminKeyHeader =
     c.req.header('x-admin-token') ||
     c.req.header('x-api-key') ||
-    (isSseStreamRoute ? c.req.query('adminToken') : '') ||
     '';
 
   const expectedAdminKey = String(env?.ADMIN_API_KEY || '').trim();
@@ -239,51 +240,77 @@ export async function resolveAuthContext(c: Context<AppEnv>): Promise<{
     const secret = resolveJwtSecret(env);
     const claims = await verifyJwt(bearerToken, secret);
     if (claims) {
-      const isAdminRole =
-        claims.role === 'admin' || claims.role === 'super_admin' || claims.role === 'sysadm';
+      let resolvedRole: AuthUser['role'] = claims.role;
+      let resolvedPhone = String(claims.phone || '');
+      let resolvedEmail = claims.email ? String(claims.email) : undefined;
+      let resolvedFullName = String(claims.fullName || 'User');
 
-      try {
-        const db = c.get('db') || createDb(env);
-        if (db) {
-          if (claims.role === 'user') {
-            const userRow = await db.select().from(users).where(eq(users.id, claims.sub)).get();
-            if (!userRow || userRow.status === 'blocked') {
-              return { user: null, isAdmin: false, isDemo: false };
-            }
-            if (
-              claims.pwdVer &&
-              userRow.passwordHash &&
-              claims.pwdVer !== computePasswordVersion(userRow.passwordHash)
-            ) {
-              return { user: null, isAdmin: false, isDemo: false };
-            }
-          } else if (isAdminRole && claims.sub === 'admin-primary') {
+      const db = c.get('db') || createDb(env);
+      if (db) {
+        try {
+          if (claims.sub === 'admin-primary') {
             const row = await db
               .select()
               .from(systemSettings)
               .where(eq(systemSettings.key, 'admin_account'))
               .get();
-            const admin = safeJsonParse<{ passwordHash?: string } | null>(row?.value, null);
+            const admin = safeJsonParse<{
+              email?: string;
+              name?: string;
+              role?: AuthUser['role'];
+              passwordHash?: string;
+            } | null>(row?.value, null);
             if (
-              claims.pwdVer &&
-              admin?.passwordHash &&
+              !admin ||
+              !admin.passwordHash ||
+              !claims.pwdVer ||
               claims.pwdVer !== computePasswordVersion(admin.passwordHash)
             ) {
               return { user: null, isAdmin: false, isDemo: false };
             }
+            resolvedRole =
+              admin.role === 'admin' || admin.role === 'super_admin' || admin.role === 'sysadm'
+                ? admin.role
+                : 'super_admin';
+            if (admin.email) resolvedEmail = admin.email;
+            if (admin.name) resolvedFullName = admin.name;
+          } else if (claims.sub !== 'sysadm') {
+            const userRow = await db.select().from(users).where(eq(users.id, claims.sub)).get();
+            if (!userRow || userRow.status === 'blocked') {
+              return { user: null, isAdmin: false, isDemo: false };
+            }
+            if (
+              userRow.passwordHash &&
+              (!claims.pwdVer || claims.pwdVer !== computePasswordVersion(userRow.passwordHash))
+            ) {
+              return { user: null, isAdmin: false, isDemo: false };
+            }
+            resolvedRole =
+              userRow.role === 'admin' ||
+              userRow.role === 'super_admin' ||
+              userRow.role === 'sysadm'
+                ? userRow.role
+                : 'user';
+            resolvedPhone = String(userRow.phone || resolvedPhone);
+            resolvedEmail = userRow.email ? String(userRow.email) : undefined;
+            resolvedFullName = String(userRow.fullName || resolvedFullName);
           }
+        } catch {
+          // Fail closed when DB verification fails so blocked/revoked tokens cannot pass
+          return { user: null, isAdmin: false, isDemo: false };
         }
-      } catch {
-        // Ignore DB resolution errors when DB is unavailable in isolated contexts
       }
+
+      const isAdminRole =
+        resolvedRole === 'admin' || resolvedRole === 'super_admin' || resolvedRole === 'sysadm';
 
       return {
         user: {
           id: claims.sub,
-          phone: String(claims.phone || ''),
-          email: claims.email ? String(claims.email) : undefined,
-          fullName: String(claims.fullName || 'User'),
-          role: claims.role,
+          phone: resolvedPhone,
+          email: resolvedEmail,
+          fullName: resolvedFullName,
+          role: resolvedRole,
           isDemo: Boolean(claims.isDemo),
         },
         isAdmin: isAdminRole,

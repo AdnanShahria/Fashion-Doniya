@@ -64,17 +64,21 @@ beforeAll(async () => {
     savedEmailEnv[key] = process.env[key];
     delete process.env[key];
   }
-  const migrationSql = fs.readFileSync(
-    path.resolve(process.cwd(), 'backend/drizzle/0000_misty_pandemic.sql'),
-    'utf-8'
-  );
+  const migrationDir = path.resolve(process.cwd(), 'backend/drizzle');
+  const migrationFiles = fs
+    .readdirSync(migrationDir)
+    .filter((f) => f.endsWith('.sql'))
+    .sort();
   const client = createClient({ url: `file:${TEST_DB_REL}` });
-  const statements = migrationSql
-    .split('--> statement-breakpoint')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  for (const stmt of statements) {
-    await client.execute(stmt);
+  for (const file of migrationFiles) {
+    const migrationSql = fs.readFileSync(path.join(migrationDir, file), 'utf-8');
+    const statements = migrationSql
+      .split('--> statement-breakpoint')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const stmt of statements) {
+      await client.execute(stmt);
+    }
   }
   client.close();
 });
@@ -369,5 +373,181 @@ describe('Authentication, Session Lifecycle, RBAC & BOLA/IDOR Security', () => {
     });
     const res = await app.fetch(req, prodEnv);
     expect(res.status).toBe(401);
+  });
+
+  it('prevents silent takeover of passwordless CRM records via /register', async () => {
+    // Admin creates a passwordless CRM customer with an email
+    const adminLogin = await apiReq('/api/v1/admin/auth/login', {
+      method: 'POST',
+      body: { email: 'admin@fashiondoniyabd.com', password: 'TestAdminPassword#2026' },
+    });
+    const adminToken = ((await adminLogin.json()) as any).token;
+
+    const crmPhone = '01955667700';
+    const crmEmail = 'crm.victim@example.com';
+    const createCrm = await apiReq('/api/v1/admin/customers', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${adminToken}` },
+      body: { fullName: 'CRM Victim', phone: crmPhone, email: crmEmail },
+    });
+    expect(createCrm.status).toBe(201);
+
+    // Attacker tries to claim the CRM account via /register even knowing the email
+    const hijackTry = await apiReq('/api/v1/auth/register', {
+      method: 'POST',
+      body: {
+        fullName: 'Attacker',
+        phone: crmPhone,
+        email: crmEmail,
+        password: 'AttackerPassword@123',
+      },
+    });
+    expect(hijackTry.status).toBe(409);
+  });
+
+  it('validates email uniqueness & phone format in /customers/sync and prevents blocked user enumeration', async () => {
+    // Register a fresh customer to test /customers/sync & block flow
+    const victimPhone = '01655667711';
+    const victimEmail = 'victim.sync@example.com';
+    const reg = await apiReq('/api/v1/auth/register', {
+      method: 'POST',
+      body: {
+        fullName: 'Sync Tester',
+        phone: victimPhone,
+        email: victimEmail,
+        password: 'Password@123',
+      },
+    });
+    expect(reg.status).toBe(200);
+    const regJson = (await reg.json()) as any;
+    const victimToken = regJson.token;
+    const victimId = regJson.user.id;
+
+    // Cannot set email to another user's email
+    const dupEmailSync = await apiReq('/api/v1/customers/sync', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${victimToken}` },
+      body: { user: { id: victimId, phone: victimPhone, email: userEmail } },
+    });
+    expect(dupEmailSync.status).toBe(409);
+
+    // Cannot set invalid phone
+    const badPhoneSync = await apiReq('/api/v1/customers/sync', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${victimToken}` },
+      body: { user: { id: victimId, phone: '123' } },
+    });
+    expect(badPhoneSync.status).toBe(400);
+
+    // Admin blocks victim
+    const adminLogin = await apiReq('/api/v1/admin/auth/login', {
+      method: 'POST',
+      body: { email: 'admin@fashiondoniyabd.com', password: 'TestAdminPassword#2026' },
+    });
+    const adminToken = ((await adminLogin.json()) as any).token;
+    const blockRes = await apiReq(`/api/v1/admin/customers/${encodeURIComponent(victimId)}/status`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${adminToken}` },
+      body: { status: 'blocked' },
+    });
+    expect(blockRes.status).toBe(200);
+
+    // Wrong password on blocked user must return 401 (no status leak), right password returns 403
+    const wrongPassBlocked = await apiReq('/api/v1/auth/login', {
+      method: 'POST',
+      body: { identifier: victimPhone, password: 'WrongPassword!' },
+    });
+    expect(wrongPassBlocked.status).toBe(401);
+
+    const rightPassBlocked = await apiReq('/api/v1/auth/login', {
+      method: 'POST',
+      body: { identifier: victimPhone, password: 'Password@123' },
+    });
+    expect(rightPassBlocked.status).toBe(403);
+
+    // Existing token for blocked user is rejected on /auth/me
+    const blockedMe = await apiReq('/api/v1/auth/me', {
+      headers: { Authorization: `Bearer ${victimToken}` },
+    });
+    expect(blockedMe.status).toBe(401);
+
+    // Forgot password for unknown or blocked user returns generic 200 without devOtp
+    const forgotBlocked = await apiReq('/api/v1/auth/forgot-password', {
+      method: 'POST',
+      body: { identifier: victimEmail },
+    });
+    expect(forgotBlocked.status).toBe(200);
+    const forgotBlockedJson = (await forgotBlocked.json()) as any;
+    expect(forgotBlockedJson.devOtp).toBeUndefined();
+  });
+
+  it('returns 503 on /forgot-password in production when no OTP delivery channel succeeds', async () => {
+    const prodEnv = {
+      ...testEnv,
+      NODE_ENV: 'production',
+      SMS_ENABLED: 'false',
+    } as unknown as Bindings;
+    const req = new Request('https://fashiondoniyabd.com/api/v1/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: userEmail }),
+    });
+    const res = await app.fetch(req, prodEnv);
+    expect(res.status).toBe(503);
+  });
+
+  it('rotates admin JWT on password change and invalidates the old admin token', async () => {
+    const adminLogin = await apiReq('/api/v1/admin/auth/login', {
+      method: 'POST',
+      body: { email: 'admin@fashiondoniyabd.com', password: 'TestAdminPassword#2026' },
+    });
+    expect(adminLogin.status).toBe(200);
+    const oldAdminToken = ((await adminLogin.json()) as any).token;
+
+    const changeRes = await apiReq('/api/v1/admin/auth/change-password', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${oldAdminToken}` },
+      body: {
+        currentPassword: 'TestAdminPassword#2026',
+        newPassword: 'UpdatedAdmin#2026',
+      },
+    });
+    expect(changeRes.status).toBe(200);
+    const changeJson = (await changeRes.json()) as any;
+    expect(changeJson.token).toBeTruthy();
+
+    // Old admin token must now fail with 401
+    const oldMe = await apiReq('/api/v1/admin/auth/me', {
+      headers: { Authorization: `Bearer ${oldAdminToken}` },
+    });
+    expect(oldMe.status).toBe(401);
+
+    // New admin token must succeed
+    const newMe = await apiReq('/api/v1/admin/auth/me', {
+      headers: { Authorization: `Bearer ${changeJson.token}` },
+    });
+    expect(newMe.status).toBe(200);
+  });
+
+  it('preserves exact password characters without trim mismatch across reset and login', async () => {
+    const spacedPass = '  Pass Space 2026  ';
+    const otpRes = await apiReq('/api/v1/auth/forgot-password', {
+      method: 'POST',
+      body: { identifier: userEmail },
+    });
+    expect(otpRes.status).toBe(200);
+    const devOtp = ((await otpRes.json()) as any).devOtp;
+
+    const resetRes = await apiReq('/api/v1/auth/reset-password', {
+      method: 'POST',
+      body: { identifier: userEmail, code: devOtp, newPassword: spacedPass },
+    });
+    expect(resetRes.status).toBe(200);
+
+    const loginRes = await apiReq('/api/v1/auth/login', {
+      method: 'POST',
+      body: { identifier: userEmail, password: spacedPass },
+    });
+    expect(loginRes.status).toBe(200);
   });
 });

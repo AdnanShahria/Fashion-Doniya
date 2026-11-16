@@ -43,7 +43,6 @@ const STORAGE_KEYS = {
   CART: 'fashion_doniya_cart',
   WISHLIST: 'fashion_doniya_wishlist',
   CURRENT_USER: 'fashion_doniya_current_user',
-  SAVED_USERS: 'fashion_doniya_saved_users',
 };
 
 const CURRENT_VERSION = '6.0.0';
@@ -107,6 +106,8 @@ export class StorageService {
           this.setCustomRequests([]);
         }
       }
+      // Remove legacy plaintext-password storage if present
+      localStorage.removeItem('fashion_doniya_saved_users');
       this.isInitialized = true;
     } catch (e) {
       console.warn('LocalStorage access error, falling back to memory defaults', e);
@@ -168,7 +169,7 @@ export class StorageService {
       localStorage.setItem(STORAGE_KEYS.ORDER_TRACKING_HISTORY, JSON.stringify(mergedHistory));
       localStorage.setItem(STORAGE_KEYS.COURIER_INFORMATION, JSON.stringify(mergedCourier));
       localStorage.setItem(STORAGE_KEYS.CUSTOM_REQUESTS, JSON.stringify(INITIAL_CUSTOM_REQUESTS));
-      localStorage.removeItem(STORAGE_KEYS.SAVED_USERS);
+      localStorage.removeItem('fashion_doniya_saved_users');
     } catch (e) {
       console.error('Failed to seed defaults into localStorage', e);
     }
@@ -425,7 +426,7 @@ export class StorageService {
     this.setItem(STORAGE_KEYS.CURRENT_USER, user);
   }
 
-  // Saved Registered Users with Password Authentication
+  // Phone Normalization Helper (supports Bengali digits & +880 prefix)
   public static normalizePhone(rawPhone: string): string {
     const bengaliToEnglish = rawPhone.replace(/[০-৯]/g, (d) =>
       String('০১২৩৪৫৬৭৮৯'.indexOf(d))
@@ -438,188 +439,6 @@ export class StorageService {
       return '0' + digits;
     }
     return digits;
-  }
-
-  public static getSavedUsers(): Array<CustomerUser & { password?: string }> {
-    const defaultUsers: Array<CustomerUser & { password?: string }> = [
-      {
-        id: 'usr-default-1',
-        fullName: 'নুসরাত জাহান',
-        phone: '01711223344',
-        email: '01711223344@fashiondoniya.com',
-        password: '123456',
-        address: {
-          district: 'ঢাকা',
-          upazila: 'ধানমন্ডি',
-          area: 'রোড ৮',
-          fullAddress: 'ফ্ল্যাট ৪বি, বাড়ি ২৭, রোড ৮, ধানমন্ডি, ঢাকা',
-        },
-        createdAt: new Date().toISOString(),
-      },
-    ];
-    return this.getItem<Array<CustomerUser & { password?: string }>>(
-      STORAGE_KEYS.SAVED_USERS,
-      defaultUsers
-    );
-  }
-
-  public static setSavedUsers(users: Array<CustomerUser & { password?: string }>): void {
-    this.setItem(STORAGE_KEYS.SAVED_USERS, users);
-  }
-
-  public static authenticateUser(
-    rawPhone: string,
-    password: string
-  ): { success: boolean; user?: CustomerUser; message: string } {
-    const phone = this.normalizePhone(rawPhone);
-    if (!/^01[3-9]\d{8}$/.test(phone)) {
-      return {
-        success: false,
-        message: 'সঠিক ১১ ডিজিটের বাংলাদেশী মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)',
-      };
-    }
-    if (!password || password.trim().length < 4) {
-      return {
-        success: false,
-        message: 'অনুগ্রহ করে কমপক্ষে ৪ অক্ষরের পাসওয়ার্ড দিন',
-      };
-    }
-
-    const users = this.getSavedUsers();
-    const existing = users.find((u) => this.normalizePhone(u.phone) === phone);
-
-    if (!existing) {
-      return {
-        success: false,
-        message:
-          'এই মোবাইল নম্বর দিয়ে কোনো অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে প্রথমে রেজিস্টার করুন।',
-      };
-    }
-
-    if (existing.status === 'blocked') {
-      return {
-        success: false,
-        message: 'আপনার অ্যাকাউন্টটি ব্লক করা হয়েছে। সহায়তার জন্য হেল্পলাইনে যোগাযোগ করুন।',
-      };
-    }
-
-    if (existing.password && existing.password !== password) {
-      return {
-        success: false,
-        message: 'পাসওয়ার্ড সঠিক নয়! আবার চেষ্টা করুন অথবা পাসওয়ার্ড রিসেট করুন।',
-      };
-    }
-
-    const { password: _, ...cleanUser } = existing;
-    this.setCurrentUser(cleanUser);
-    fetch('/api/v1/customers/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user: cleanUser })
-    }).catch(() => {});
-    return {
-      success: true,
-      user: cleanUser,
-      message: `স্বাগতম, ${cleanUser.fullName}! সফলভাবে লগইন হয়েছে।`,
-    };
-  }
-
-  public static registerUser(
-    fullName: string,
-    rawPhone: string,
-    password: string
-  ): { success: boolean; user?: CustomerUser; message: string } {
-    const trimmedName = fullName.trim();
-    if (!trimmedName || trimmedName.length < 2) {
-      return { success: false, message: 'অনুগ্রহ করে আপনার পুরো নাম লিখুন' };
-    }
-
-    const phone = this.normalizePhone(rawPhone);
-    if (!/^01[3-9]\d{8}$/.test(phone)) {
-      return {
-        success: false,
-        message: 'সঠিক ১১ ডিজিটের বাংলাদেশী মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)',
-      };
-    }
-    if (!password || password.trim().length < 4) {
-      return {
-        success: false,
-        message: 'পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে',
-      };
-    }
-
-    const users = this.getSavedUsers();
-    const existingIdx = users.findIndex((u) => this.normalizePhone(u.phone) === phone);
-
-    if (existingIdx >= 0) {
-      return {
-        success: false,
-        message:
-          'এই মোবাইল নম্বর দিয়ে ইতিমধ্যে অ্যাকাউন্ট খোলা আছে। অনুগ্রহ করে লগইন করুন।',
-      };
-    }
-
-    const newRecord: CustomerUser & { password?: string } = {
-      id: `usr-${Date.now()}`,
-      fullName: trimmedName,
-      phone,
-      email: `${phone}@fashiondoniya.com`,
-      status: 'active',
-      password,
-      createdAt: new Date().toISOString(),
-    };
-
-    this.setSavedUsers([...users, newRecord]);
-
-    const { password: _, ...cleanUser } = newRecord;
-    this.setCurrentUser(cleanUser);
-    fetch('/api/v1/customers/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user: cleanUser })
-    }).catch(() => {});
-    return {
-      success: true,
-      user: cleanUser,
-      message: `অভিনন্দন ${trimmedName}! আপনার নতুন অ্যাকাউন্ট তৈরি ও লগইন সম্পন্ন হয়েছে।`,
-    };
-  }
-
-  public static resetUserPassword(
-    rawPhone: string,
-    newPassword: string
-  ): { success: boolean; message: string } {
-    const phone = this.normalizePhone(rawPhone);
-    if (!/^01[3-9]\d{8}$/.test(phone)) {
-      return {
-        success: false,
-        message: 'সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)',
-      };
-    }
-    if (!newPassword || newPassword.trim().length < 4) {
-      return {
-        success: false,
-        message: 'নতুন পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে',
-      };
-    }
-
-    const users = this.getSavedUsers();
-    const idx = users.findIndex((u) => this.normalizePhone(u.phone) === phone);
-    if (idx < 0) {
-      return {
-        success: false,
-        message:
-          'এই মোবাইল নম্বর দিয়ে কোনো নিবন্ধিত অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে নতুন অ্যাকাউন্ট রেজিস্টার করুন।',
-      };
-    }
-
-    users[idx] = { ...users[idx], password: newPassword };
-    this.setSavedUsers([...users]);
-
-    return {
-      success: true,
-      message: 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে! এখন নতুন পাসওয়ার্ড দিয়ে লগইন করুন।',
-    };
   }
 }
 

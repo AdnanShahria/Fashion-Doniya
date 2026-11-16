@@ -432,9 +432,11 @@ const AppContent: React.FC = () => {
   if (location.pathname.startsWith('/admin') || currentPage === 'admin') {
     return (
       <div data-layoutless="true">
-        <Suspense fallback={<AdminPageSkeleton />}>
-          <AdminLayout />
-        </Suspense>
+        <ProtectedRoute role="admin">
+          <Suspense fallback={<AdminPageSkeleton />}>
+            <AdminLayout />
+          </Suspense>
+        </ProtectedRoute>
         <ToastNotification />
       </div>
     );
