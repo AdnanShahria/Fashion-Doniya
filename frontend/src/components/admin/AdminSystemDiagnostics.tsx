@@ -770,7 +770,7 @@ export const AdminSystemDiagnostics: React.FC = () => {
                         <td className="px-3 py-1.5 font-mono">
                           {typeof a.durationMs === 'number' ? `${a.durationMs}ms` : '—'}
                         </td>
-                        <td className="px-3 py-1.5 font-mono truncate max-w-[260px]">
+                        <td className="px-3 py-1.5 font-mono truncate max-w-65">
                           {a.messageId || a.error || 'Delivered'}
                         </td>
                       </tr>
@@ -1241,7 +1241,7 @@ export const AdminSystemDiagnostics: React.FC = () => {
               </div>
               <div className="flex items-center justify-between p-2 rounded-lg bg-[#FAF8F4] border border-[#EDE5D9]">
                 <span className="font-semibold">SITE_URL</span>
-                <span className="font-mono text-[10px] truncate max-w-[140px]">
+                <span className="font-mono text-[10px] truncate max-w-35">
                   {status.siteUrl || 'Not Set'}
                 </span>
               </div>

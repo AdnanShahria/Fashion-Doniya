@@ -245,7 +245,7 @@ export const CartPage: React.FC = () => {
                     >
                       -
                     </button>
-                    <span className="px-3 py-1 text-xs font-bold tabular-nums text-[#242424] min-w-[55px] text-center">
+                    <span className="px-3 py-1 text-xs font-bold tabular-nums text-[#242424] min-w-13.75 text-center">
                       {item.yards} গজ
                     </span>
                     <button
@@ -267,7 +267,7 @@ export const CartPage: React.FC = () => {
                 </div>
 
                 {/* Subtotal */}
-                <div className="text-right sm:min-w-[90px]">
+                <div className="text-right sm:min-w-22.5">
                   <span className="text-[11px] text-[#242424]/50 block sm:hidden">মোট</span>
                   <span className="text-base font-bold text-[#242424] tabular-nums">
                     ৳{itemSubtotal}
@@ -397,7 +397,7 @@ export const CartPage: React.FC = () => {
             {/* Proceed to Checkout CTA */}
             <button
               onClick={() => navigateTo('checkout')}
-              className="w-full py-3.5 px-4 bg-gradient-to-r from-[#850B16] via-[#6B0812] to-[#54050D] hover:from-[#960D19] hover:to-[#6B0812] active:scale-[0.98] text-white text-xs sm:text-sm font-bold rounded-xl shadow-[0_6px_20px_-4px_rgba(107,8,18,0.35)] transition-all flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-3.5 px-4 bg-linear-to-r from-[#850B16] via-[#6B0812] to-[#54050D] hover:from-[#960D19] hover:to-[#6B0812] active:scale-[0.98] text-white text-xs sm:text-sm font-bold rounded-xl shadow-[0_6px_20px_-4px_rgba(107,8,18,0.35)] transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <span>চেকআউটে এগিয়ে যান</span>
               <ArrowRight className="w-4 h-4" />

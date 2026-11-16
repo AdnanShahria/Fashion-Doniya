@@ -581,7 +581,7 @@ export const OrderTrackingPage: React.FC = () => {
 
                 <div className="relative">
                   {/* Connecting Line on Desktop */}
-                  <div className="hidden sm:block absolute top-5 left-6 right-6 h-0.5 bg-[#EDE5D9] -z-0" />
+                  <div className="hidden sm:block absolute top-5 left-6 right-6 h-0.5 bg-[#EDE5D9] z-0" />
 
                   <div className="grid grid-cols-1 sm:grid-cols-6 gap-4 relative z-10">
                     {TIMELINE_STAGES.map((stage, idx) => {
@@ -776,7 +776,7 @@ export const OrderTrackingPage: React.FC = () => {
                     >
                       {/* Timeline Dot */}
                       <span
-                        className={`absolute -left-[27px] top-4 w-3.5 h-3.5 rounded-full border-2 ${
+                        className={`absolute -left-6.75 top-4 w-3.5 h-3.5 rounded-full border-2 ${
                           isLatest
                             ? 'bg-[#6B0812] border-[#C5A46D] ring-4 ring-[#C5A46D]/20'
                             : 'bg-white border-[#C5A46D]'

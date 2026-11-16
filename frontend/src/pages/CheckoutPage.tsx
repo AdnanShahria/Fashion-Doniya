@@ -355,7 +355,7 @@ export const CheckoutPage: React.FC = () => {
           config: paymentSettings.nagad,
           borderClass: 'border-[#F16522]',
           bgClass: 'bg-[#FFF6F0]',
-          headerBgClass: 'bg-gradient-to-r from-[#EC1C24] to-[#F7941D]',
+          headerBgClass: 'bg-linear-to-r from-[#EC1C24] to-[#F7941D]',
           badgeBgClass: 'bg-[#F16522]/12 text-[#D44D0E] border-[#F16522]/30',
           accentTextClass: 'text-[#F16522]',
           copyBtnClass: 'bg-[#F16522] hover:bg-[#D44D0E] text-white',
@@ -642,7 +642,7 @@ export const CheckoutPage: React.FC = () => {
                       <div className="flex-1">
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center justify-center px-2 py-0.5 rounded bg-gradient-to-r from-[#EC1C24] to-[#F7941D] text-white font-extrabold text-[11px] tracking-wide">
+                            <span className="inline-flex items-center justify-center px-2 py-0.5 rounded bg-linear-to-r from-[#EC1C24] to-[#F7941D] text-white font-extrabold text-[11px] tracking-wide">
                               Nagad
                             </span>
                             <span className="font-bold text-[#242424] text-sm">

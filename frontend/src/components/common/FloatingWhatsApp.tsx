@@ -306,13 +306,13 @@ export const FloatingWhatsApp: React.FC = () => {
             openBelow ? 'top-full mt-3' : 'bottom-full mb-3'
           } ${
             alignLeft ? 'left-0' : 'right-0'
-          } w-[205px] bg-white rounded-[20px] shadow-[0_10px_35px_rgba(0,0,0,0.12)] border border-black/[0.06] px-4 py-1.5 animate-in fade-in zoom-in-95 duration-150`}
+          } w-51.25 bg-white rounded-[20px] shadow-[0_10px_35px_rgba(0,0,0,0.12)] border border-black/6 px-4 py-1.5 animate-in fade-in zoom-in-95 duration-150`}
         >
           {activeItems.map((item, idx) => {
             const targetUrl = normalizeContactUrl(item.url, item.iconType);
             return (
               <React.Fragment key={item.id}>
-                {idx > 0 && <div className="h-[1px] bg-gray-100 mx-1" />}
+                {idx > 0 && <div className="h-px bg-gray-100 mx-1" />}
                 <a
                   href={targetUrl}
                   target={item.iconType === 'phone' || item.iconType === 'email' ? '_self' : '_blank'}
@@ -343,7 +343,7 @@ export const FloatingWhatsApp: React.FC = () => {
           boxShadow:
             '0 5px 14px rgba(234, 85, 0, 0.34), inset 0 1.5px 2.5px rgba(255, 255, 255, 0.42), inset 0 -2px 3px rgba(175, 52, 0, 0.25)'
         }}
-        className={`w-[52px] h-[52px] aspect-square rounded-full flex items-center justify-center text-white transition-transform ${
+        className={`w-13 h-13 aspect-square rounded-full flex items-center justify-center text-white transition-transform ${
           isDragging ? 'cursor-grabbing scale-105' : 'cursor-grab hover:scale-105 active:scale-95'
         }`}
         aria-label={floatingConfig.tooltipText || 'যোগাযোগ করুন'}
@@ -353,7 +353,7 @@ export const FloatingWhatsApp: React.FC = () => {
           <X className="w-6 h-6 stroke-[2.5] text-white" />
         ) : (
           <svg
-            className="w-[26px] h-[26px] text-white drop-shadow-[0_1px_1px_rgba(160,45,0,0.25)]"
+            className="w-6.5 h-6.5 text-white drop-shadow-[0_1px_1px_rgba(160,45,0,0.25)]"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
