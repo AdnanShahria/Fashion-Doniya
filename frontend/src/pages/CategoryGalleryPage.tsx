@@ -185,7 +185,7 @@ export const CategoryGalleryPage: React.FC<CategoryGalleryPageProps> = ({
                 {cat.standardYards && (
                   <span
                     className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded ${
-                      active ? 'bg-white/20 text-white' : 'bg-[#FAF6F0] text-[#850B1B]'
+                      active ? 'bg-white/20 text-white' : 'bg-[#FAF8F5] text-[#850B1B]'
                     }`}
                   >
                     {cat.standardYards}

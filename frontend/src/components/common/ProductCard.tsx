@@ -50,7 +50,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   return (
     <article
       onClick={handleCardClick}
-      className="group h-full w-full min-w-0 box-border bg-[#FFFDF9] rounded-[18px] sm:rounded-2xl border border-[#E5D4BE] hover:border-[#C59B48] shadow-[0_2px_8px_-4px_rgba(36,22,20,0.06),0_10px_26px_-12px_rgba(107,8,18,0.10)] hover:shadow-[0_18px_40px_-14px_rgba(107,8,18,0.16)] transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-pointer sm:cursor-default"
+      className="group h-full w-full min-w-0 box-border bg-[#FFFDF9] rounded-[18px] sm:rounded-2xl border border-[#E5D4BE] hover:border-[#C59B48] shadow-[0_2px_8px_-4px_rgba(36,22,20,0.06),0_10px_26px_-12px_rgba(107,8,18,0.10)] hover:shadow-[0_16px_36px_-12px_rgba(107,8,18,0.18)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between overflow-hidden cursor-pointer sm:cursor-default"
     >
       {/* 1. High-Resolution Fabric Photography */}
       <div className="relative overflow-hidden rounded-t-[17px] sm:rounded-t-2xl cursor-pointer bg-[#F4ECE0]">
@@ -145,11 +145,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           <Link
             to={productHref}
             onClick={(e) => e.stopPropagation()}
-            className="w-8 h-8 rounded-full bg-[#6B0812] hover:bg-[#53050D] text-white flex items-center justify-center shrink-0 shadow-[0_3px_10px_rgba(107,8,18,0.22)] transition-transform active:scale-95 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
+            className="w-9 h-9 min-w-[36px] min-h-[36px] rounded-full bg-[#6B0812] hover:bg-[#53050D] text-white flex items-center justify-center shrink-0 shadow-[0_3px_10px_rgba(107,8,18,0.22)] transition-transform active:scale-90 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
             aria-label="বিস্তারিত দেখুন"
             title="বিস্তারিত দেখুন"
           >
-            <ArrowRight className="w-3.5 h-3.5 stroke-[2.2]" />
+            <ArrowRight className="w-4 h-4 stroke-[2.2]" />
           </Link>
         </div>
       </div>
@@ -214,13 +214,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             </div>
           </div>
 
-          {/* Two Clear Action Buttons (40px+ comfortable hit height) */}
+          {/* Two Clear Action Buttons (Apple HIG 44px hit height) */}
           <div className="grid grid-cols-2 gap-2.5">
             <button
               type="button"
               disabled={isOutOfStock}
               onClick={() => addToCart(product, selectedYards)}
-              className="min-h-[40px] py-2 px-3 rounded-xl bg-[#FAF3E8] hover:bg-[#F1E3CE] disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] text-[#6B0812] border border-[#DFC9AA] hover:border-[#C59B48] text-sm font-semibold transition-all duration-200 cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
+              className="min-h-[44px] py-2.5 px-3 rounded-xl bg-[#FAF3E8] hover:bg-[#F1E3CE] disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97] text-[#6B0812] border border-[#DFC9AA] hover:border-[#C59B48] text-sm font-semibold transition-all duration-200 cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
             >
               {isOutOfStock ? 'স্টক শেষ' : 'কার্টে যোগ করুন'}
             </button>
@@ -229,7 +229,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               type="button"
               disabled={isOutOfStock}
               onClick={() => buyNow(product, selectedYards)}
-              className="min-h-[40px] py-2 px-3 rounded-xl bg-gradient-to-b from-[#7D0A15] to-[#63060F] hover:from-[#8C0C18] hover:to-[#53050D] disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] text-white text-sm font-semibold shadow-[0_4px_12px_rgba(107,8,18,0.20),inset_0_1px_0_rgba(255,255,255,0.18)] transition-all duration-200 cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
+              className="min-h-[44px] py-2.5 px-3 rounded-xl bg-gradient-to-b from-[#7D0A15] to-[#63060F] hover:from-[#8C0C18] hover:to-[#53050D] disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97] text-white text-sm font-semibold shadow-[0_4px_14px_rgba(107,8,18,0.25),inset_0_1px_0_rgba(255,255,255,0.2)] transition-all duration-200 cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
             >
               {isOutOfStock ? 'অপ্রাপ্য' : 'এখনই কিনুন'}
             </button>

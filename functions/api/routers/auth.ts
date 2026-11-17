@@ -62,10 +62,11 @@ function buildPublicCustomerPayload(row: typeof users.$inferSelect, roleOverride
     (row.role === 'admin' || row.role === 'super_admin' || row.role === 'sysadm'
       ? row.role
       : 'user');
+  const safePhone = row.phone && !row.phone.startsWith('no-phone-') ? row.phone : '';
   return {
     id: row.id,
     fullName: row.fullName,
-    phone: row.phone,
+    phone: safePhone,
     email: row.email || undefined,
     role,
     district: row.district || undefined,
@@ -87,65 +88,102 @@ function buildPublicCustomerPayload(row: typeof users.$inferSelect, roleOverride
   };
 }
 
-// Customer Registration
+// Customer Registration (Email-First, Zero-SMS Cost Architecture)
 authRouter.post('/register', authRateLimiter, async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const fullName = String(body.fullName || '').trim();
-  const phone = normalizePhone(String(body.phone || ''));
+  const rawPhone = String(body.phone || '').trim();
+  const phone = rawPhone ? normalizePhone(rawPhone) : '';
   const password = String(body.password || '');
-  const email = body.email ? String(body.email).trim().toLowerCase() : null;
+  const email = String(body.email || '').trim().toLowerCase();
 
-  if (!fullName || !phone || !password.trim() || password.length < 6) {
+  if (!fullName || fullName.length < 2) {
     return c.json(
-      { success: false, message: 'নাম, মোবাইল নম্বর এবং কমপক্ষে ৬ অক্ষরের পাসওয়ার্ড আবশ্যক।' },
+      { success: false, message: 'অনুগ্রহ করে আপনার পুরো নাম প্রদান করুন।' },
       400
     );
   }
 
-  if (!/^01[3-9]\d{8}$/.test(phone)) {
+  // Must provide at least an email or phone; email is primary
+  if (!email && !phone) {
+    return c.json(
+      { success: false, message: 'সঠিক ইমেইল ঠিকানা প্রদান করুন (যেমন: name@example.com)।' },
+      400
+    );
+  }
+
+  // If email is provided, validate format
+  if (email && !EMAIL_RE.test(email)) {
+    return c.json(
+      { success: false, message: 'সঠিক ইমেইল ঠিকানা প্রদান করুন (যেমন: name@example.com)।' },
+      400
+    );
+  }
+
+  if (!password.trim() || password.length < 6) {
+    return c.json(
+      { success: false, message: 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।' },
+      400
+    );
+  }
+
+  // Mobile number is optional at registration; if provided, validate BD format
+  if (phone && !/^01[3-9]\d{8}$/.test(phone)) {
     return c.json(
       { success: false, message: 'সঠিক ১১ ডিজিটের মোবাইল নম্বর প্রদান করুন (01XXXXXXXXX)।' },
       400
     );
   }
 
-  if (email && !EMAIL_RE.test(email)) {
-    return c.json(
-      { success: false, message: 'সঠিক ইমেইল ঠিকানা প্রদান করুন।' },
-      400
-    );
-  }
-
   const db = c.get('db');
-  const existing = await db.select().from(users).where(eq(users.phone, phone)).get();
-  if (existing) {
-    if (existing.status === 'blocked') {
-      return c.json(
-        { success: false, code: 'ACCOUNT_BLOCKED', message: 'আপনার অ্যাকাউন্টটি ব্লক করা হয়েছে।' },
-        403
-      );
-    }
-    if (existing.passwordHash) {
-      return c.json(
-        { success: false, message: 'এই মোবাইল নম্বরে ইতিমধ্যেই একটি অ্যাকাউন্ট রয়েছে।' },
-        409
-      );
-    }
-    // Security: never allow unauthenticated /register to silently claim an existing guest/CRM row
-    return c.json(
-      {
-        success: false,
-        message: 'এই মোবাইল নম্বরে একটি প্রোফাইল ইতিমধ্যেই রয়েছে। পাসওয়ার্ড সেট করতে পাসওয়ার্ড রিসেট (OTP) ব্যবহার করুন।',
-      },
-      409
-    );
-  }
 
+  // Check email conflict first if email is provided
   if (email) {
     const emailConflict = await findUserByEmail(db, email);
     if (emailConflict) {
+      if (emailConflict.status === 'blocked') {
+        return c.json(
+          { success: false, code: 'ACCOUNT_BLOCKED', message: 'আপনার অ্যাকাউন্টটি ব্লক করা হয়েছে।' },
+          403
+        );
+      }
+      if (emailConflict.passwordHash) {
+        return c.json(
+          { success: false, message: 'এই ইমেইল ঠিকানায় ইতিমধ্যেই একটি অ্যাকাউন্ট রয়েছে।' },
+          409
+        );
+      }
       return c.json(
-        { success: false, message: 'এই ইমেইল ঠিকানায় ইতিমধ্যেই একটি অ্যাকাউন্ট রয়েছে।' },
+        {
+          success: false,
+          message: 'এই ইমেইল ঠিকানায় একটি প্রোফাইল রয়েছে। পাসওয়ার্ড সেট করতে পাসওয়ার্ড রিসেট (OTP) ব্যবহার করুন।',
+        },
+        409
+      );
+    }
+  }
+
+  // Check phone conflict if phone was provided
+  if (phone) {
+    const phoneConflict = await db.select().from(users).where(eq(users.phone, phone)).get();
+    if (phoneConflict) {
+      if (phoneConflict.status === 'blocked') {
+        return c.json(
+          { success: false, code: 'ACCOUNT_BLOCKED', message: 'আপনার অ্যাকাউন্টটি ব্লক করা হয়েছে।' },
+          403
+        );
+      }
+      if (phoneConflict.passwordHash) {
+        return c.json(
+          { success: false, message: 'এই মোবাইল নম্বরে ইতিমধ্যেই একটি অ্যাকাউন্ট রয়েছে।' },
+          409
+        );
+      }
+      return c.json(
+        {
+          success: false,
+          message: 'এই মোবাইল নম্বরে একটি প্রোফাইল রয়েছে। পাসওয়ার্ড সেট করতে পাসওয়ার্ড রিসেট (OTP) ব্যবহার করুন।',
+        },
         409
       );
     }
@@ -154,12 +192,14 @@ authRouter.post('/register', authRateLimiter, async (c) => {
   const now = new Date().toISOString();
   const { salt, hash } = await hashPassword(password);
   const userId = `cust-${crypto.randomUUID()}`;
+  // For non-null database constraint compatibility across SQLite/D1 engines:
+  const phoneToSave = phone || `no-phone-${userId.slice(5, 18)}`;
 
   try {
     await db.insert(users).values({
       id: userId,
       fullName,
-      phone,
+      phone: phoneToSave,
       email,
       passwordHash: hash,
       passwordSalt: salt,
@@ -170,7 +210,7 @@ authRouter.post('/register', authRateLimiter, async (c) => {
     });
   } catch {
     return c.json(
-      { success: false, message: 'এই মোবাইল নম্বর বা ইমেইলে ইতিমধ্যেই একটি অ্যাকাউন্ট রয়েছে।' },
+      { success: false, message: 'এই ইমেইল বা মোবাইল নম্বরে ইতিমধ্যেই একটি অ্যাকাউন্ট রয়েছে।' },
       409
     );
   }
@@ -179,14 +219,29 @@ authRouter.post('/register', authRateLimiter, async (c) => {
   const token = await signJwt(
     {
       sub: userId,
-      phone,
-      email: email || undefined,
+      phone: phone || undefined,
+      email,
       fullName,
       role: 'user',
       pwdVer: computePasswordVersion(hash),
     },
     resolveJwtSecret(c.env)
   );
+
+  // Send welcome email (free, rich HTML, zero SMS cost)
+  sendTransactionalEmail(c.env, {
+    to: email,
+    subject: 'Fashion Doniya BD — আপনার অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে',
+    html: `<div style="font-family:sans-serif;max-width:540px;margin:auto;padding:24px;background:#FAF8F5;border:1px solid #E5D4C0;border-radius:12px;">
+      <h2 style="color:#6B0812;margin-bottom:8px;">স্বাগতম, ${escapeHtml(fullName)}!</h2>
+      <p style="color:#241614;font-size:14px;line-height:1.6;">Fashion Doniya BD-তে আপনার অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে। এখন থেকে আপনি আপনার পছন্দের ফ্যাব্রিক অর্ডার ও ট্র্যাকিং সহজে করতে পারবেন।</p>
+      <div style="margin:20px 0;padding:12px 16px;background:#FFFFFF;border-left:4px solid #6B0812;border-radius:4px;">
+        <p style="margin:0;font-size:13px;color:#5C433E;"><strong>লগইন ইমেইল:</strong> ${escapeHtml(email)}</p>
+      </div>
+      <p style="color:#8C7A72;font-size:12px;margin-top:20px;">ধন্যবাদ,<br><strong>Fashion Doniya BD</strong></p>
+    </div>`,
+    text: `Welcome to Fashion Doniya BD, ${fullName}! Your account has been created with email ${email}.`,
+  }).catch(() => {});
 
   return c.json({
     success: true,
@@ -196,7 +251,7 @@ authRouter.post('/register', authRateLimiter, async (c) => {
       : {
           id: userId,
           fullName,
-          phone,
+          phone: phone || '',
           email,
           role: 'user' as const,
           status: 'active',
@@ -205,14 +260,14 @@ authRouter.post('/register', authRateLimiter, async (c) => {
   });
 });
 
-// Customer Login (supports phone or email)
+// Customer Login (supports email as primary, phone as secondary)
 authRouter.post('/login', authRateLimiter, async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-  const rawIdentifier = String(body.identifier || body.phone || body.email || '').trim();
+  const rawIdentifier = String(body.identifier || body.email || body.phone || '').trim();
   const password = String(body.password || '');
 
   if (!rawIdentifier || !password) {
-    return c.json({ success: false, message: 'মোবাইল নম্বর বা ইমেইল এবং পাসওয়ার্ড দিন।' }, 400);
+    return c.json({ success: false, message: 'ইমেইল বা মোবাইল নম্বর এবং পাসওয়ার্ড দিন।' }, 400);
   }
 
   const throttleKey = rawIdentifier.includes('@')
@@ -237,14 +292,14 @@ authRouter.post('/login', authRateLimiter, async (c) => {
 
   if (!userRow || !userRow.passwordHash || !userRow.passwordSalt) {
     recordLoginFailure('customer-login', throttleKey);
-    return c.json({ success: false, message: 'মোবাইল নম্বর বা পাসওয়ার্ড সঠিক নয়।' }, 401);
+    return c.json({ success: false, message: 'ইমেইল বা পাসওয়ার্ড সঠিক নয়।' }, 401);
   }
 
   // Verify password BEFORE checking blocked status to avoid leaking account status to unauthenticated callers
   const valid = await verifyPassword(password, userRow.passwordSalt, userRow.passwordHash);
   if (!valid) {
     recordLoginFailure('customer-login', throttleKey);
-    return c.json({ success: false, message: 'মোবাইল নম্বর বা পাসওয়ার্ড সঠিক নয়।' }, 401);
+    return c.json({ success: false, message: 'ইমেইল বা পাসওয়ার্ড সঠিক নয়।' }, 401);
   }
 
   if (userRow.status === 'blocked') {

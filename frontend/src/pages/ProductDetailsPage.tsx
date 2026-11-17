@@ -30,7 +30,8 @@ import {
   CheckCircle2,
   Scissors,
   Check,
-  Shirt
+  Shirt,
+  ChevronRight
 } from 'lucide-react';
 
 const PRODUCT_COLOR_SWATCHES: Record<string, string> = {
@@ -151,15 +152,27 @@ export const PRODUCT_OUTFIT_OPTIONS: ProductOutfitOption[] = [
   }
 ];
 
-function getInitialOutfitId(category?: string): string {
+function getInitialOutfitId(
+  category?: string,
+  validOutfitOptions: ProductOutfitOption[] = PRODUCT_OUTFIT_OPTIONS
+): string {
   const clean = (category || '').toLowerCase();
-  if (clean.includes('শর্ট') || clean.includes('short')) return 'short_kameez';
-  if (clean.includes('কটি') || clean.includes('koti') || clean.includes('kurti')) return 'kurti';
-  if (clean.includes('ওড়না') || clean.includes('orna')) return 'kamiz_dupatta';
-  if (clean.includes('লেহেঙ্গা') || clean.includes('lehenga')) return 'lehenga';
-  if (clean.includes('গাউন') || clean.includes('gown')) return 'gown';
-  if (clean.includes('শাড়ি') || clean.includes('শাড়ি') || clean.includes('saree')) return 'saree';
-  return 'kameez';
+  let candidate = 'kameez';
+  if (clean.includes('শর্ট') || clean.includes('short')) candidate = 'short_kameez';
+  else if (clean.includes('কটি') || clean.includes('koti') || clean.includes('kurti')) candidate = 'kurti';
+  else if (clean.includes('ওড়না') || clean.includes('orna')) candidate = 'kamiz_dupatta';
+  else if (clean.includes('লেহেঙ্গা') || clean.includes('lehenga')) candidate = 'lehenga';
+  else if (clean.includes('গাউন') || clean.includes('gown')) candidate = 'gown';
+  else if (clean.includes('শাড়ি') || clean.includes('শাড়ি') || clean.includes('saree')) candidate = 'saree';
+  else candidate = 'kameez';
+
+  if (validOutfitOptions.length > 0) {
+    if (validOutfitOptions.some((o) => o.id === candidate)) {
+      return candidate;
+    }
+    return validOutfitOptions[0].id;
+  }
+  return candidate;
 }
 
 export interface AdditionalProductItemOption {
@@ -310,15 +323,42 @@ export const ProductDetailsPage: React.FC = () => {
     measurementService.getCategoryMeasurementGuide(product?.fabricWidth || '3.5', catSlug)
   );
 
-  const [selectedOutfitId, setSelectedOutfitId] = useState<string>(() =>
-    getInitialOutfitId(product?.category)
-  );
+  const availableOutfits = useMemo<ProductOutfitOption[]>(() => {
+    const supported =
+      product?.supportedOutfits && product.supportedOutfits.length > 0
+        ? product.supportedOutfits
+        : product?.customMeasurementConfig?.supportedOutfits &&
+          product.customMeasurementConfig.supportedOutfits.length > 0
+        ? product.customMeasurementConfig.supportedOutfits
+        : null;
+
+    if (supported && supported.length > 0) {
+      const filtered = PRODUCT_OUTFIT_OPTIONS.filter((o) => supported.includes(o.id));
+      if (filtered.length > 0) return filtered;
+    }
+    return PRODUCT_OUTFIT_OPTIONS;
+  }, [product]);
+
+  const [selectedOutfitId, setSelectedOutfitId] = useState<string>(() => {
+    const supported =
+      product?.supportedOutfits && product.supportedOutfits.length > 0
+        ? product.supportedOutfits
+        : product?.customMeasurementConfig?.supportedOutfits &&
+          product.customMeasurementConfig.supportedOutfits.length > 0
+        ? product.customMeasurementConfig.supportedOutfits
+        : null;
+    const initialList = supported
+      ? PRODUCT_OUTFIT_OPTIONS.filter((o) => supported.includes(o.id))
+      : PRODUCT_OUTFIT_OPTIONS;
+    return getInitialOutfitId(product?.category, initialList.length > 0 ? initialList : PRODUCT_OUTFIT_OPTIONS);
+  });
 
   const selectedOutfit = useMemo(
     () =>
-      PRODUCT_OUTFIT_OPTIONS.find((o) => o.id === selectedOutfitId) ||
+      availableOutfits.find((o) => o.id === selectedOutfitId) ||
+      availableOutfits[0] ||
       PRODUCT_OUTFIT_OPTIONS[0],
-    [selectedOutfitId]
+    [availableOutfits, selectedOutfitId]
   );
 
   const customConfig = useMemo(() => {
@@ -360,6 +400,7 @@ export const ProductDetailsPage: React.FC = () => {
   >({});
   const [customizationNotes, setCustomizationNotes] = useState<string>('');
   const [standardQuantity, setStandardQuantity] = useState<number>(1);
+  const [isAddedToCart, setIsAddedToCart] = useState<boolean>(false);
   const [additionalItemCounts, setAdditionalItemCounts] = useState<Record<string, number>>({});
   const [activeCollectionModalAddonId, setActiveCollectionModalAddonId] = useState<string | null>(null);
 
@@ -401,7 +442,18 @@ export const ProductDetailsPage: React.FC = () => {
     }
   };
   const [yards, setYards] = useState<number>(() => {
-    const initOutfit = PRODUCT_OUTFIT_OPTIONS.find((o) => o.id === getInitialOutfitId(product?.category));
+    const supported =
+      product?.supportedOutfits && product.supportedOutfits.length > 0
+        ? product.supportedOutfits
+        : product?.customMeasurementConfig?.supportedOutfits &&
+          product.customMeasurementConfig.supportedOutfits.length > 0
+        ? product.customMeasurementConfig.supportedOutfits
+        : null;
+    const initialList = supported
+      ? PRODUCT_OUTFIT_OPTIONS.filter((o) => supported.includes(o.id))
+      : PRODUCT_OUTFIT_OPTIONS;
+    const initialId = getInitialOutfitId(product?.category, initialList.length > 0 ? initialList : PRODUCT_OUTFIT_OPTIONS);
+    const initOutfit = PRODUCT_OUTFIT_OPTIONS.find((o) => o.id === initialId);
     return (product ? initOutfit?.suggestedYards[product.fabricWidth] : undefined) || customConfig.standardGaj || 2.0;
   });
   const [selectedColor, setSelectedColor] = useState<string>(product?.color || '');
@@ -419,7 +471,8 @@ export const ProductDetailsPage: React.FC = () => {
         img.startsWith('http://') ||
         img.startsWith('https://') ||
         img.startsWith('data:image/') ||
-        img.startsWith('/')
+        img.startsWith('/images/') ||
+        img.startsWith('/src/')
     );
     if (customUploads.length > 0) {
       return customUploads;
@@ -433,9 +486,22 @@ export const ProductDetailsPage: React.FC = () => {
       const guide = measurementService.getCategoryMeasurementGuide(product.fabricWidth, slug);
       setMeasurementGuide(guide);
       const resolvedCfg = measurementService.getProductCustomMeasurementConfig(product);
-      const initOutfit = getInitialOutfitId(product.category);
+
+      const supported =
+        product.supportedOutfits && product.supportedOutfits.length > 0
+          ? product.supportedOutfits
+          : product.customMeasurementConfig?.supportedOutfits &&
+            product.customMeasurementConfig.supportedOutfits.length > 0
+          ? product.customMeasurementConfig.supportedOutfits
+          : null;
+      const validOutfits = supported
+        ? PRODUCT_OUTFIT_OPTIONS.filter((o) => supported.includes(o.id))
+        : PRODUCT_OUTFIT_OPTIONS;
+      const initialOutfitList = validOutfits.length > 0 ? validOutfits : PRODUCT_OUTFIT_OPTIONS;
+
+      const initOutfit = getInitialOutfitId(product.category, initialOutfitList);
       setSelectedOutfitId(initOutfit);
-      const matchedOutfit = PRODUCT_OUTFIT_OPTIONS.find((o) => o.id === initOutfit);
+      const matchedOutfit = initialOutfitList.find((o) => o.id === initOutfit) || initialOutfitList[0];
       const initialGaj =
         matchedOutfit?.suggestedYards[product.fabricWidth] ??
         resolvedCfg.standardGaj ??
@@ -730,6 +796,15 @@ export const ProductDetailsPage: React.FC = () => {
     };
   };
 
+  const handleAddToCartWithFeedback = () => {
+    if (!product) return;
+    addToCart(product, combinedTotalYards, selectedColor, true, buildCustomizationPayload());
+    setIsAddedToCart(true);
+    setTimeout(() => {
+      setIsAddedToCart(false);
+    }, 1800);
+  };
+
 
 
   const studioAngles: Array<{ id: StudioViewAngle; label: string; subtitle: string }> = [
@@ -792,10 +867,36 @@ export const ProductDetailsPage: React.FC = () => {
 
   return (
     <div className="max-w-[1360px] mx-auto px-3 sm:px-8 py-3 sm:py-6 space-y-3 sm:space-y-6 pb-20 sm:pb-24">
-      {/* 1. Top Orange Back Button */}
-      <div className="flex items-center">
-        <OrangeBackButton label="ফিরে যান" />
-      </div>
+      {/* 1. Top Apple HIG Breadcrumb Navigation */}
+      <nav
+        aria-label="Breadcrumb"
+        className="flex items-center gap-1.5 text-xs text-[#242424]/60 font-medium overflow-x-auto py-1 scrollbar-none"
+      >
+        <Link
+          to="/"
+          className="hover:text-[#850B1B] transition-colors whitespace-nowrap shrink-0"
+        >
+          হোম
+        </Link>
+        <ChevronRight className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+        <Link
+          to={`/fabric/${product.fabricWidth}-bahar`}
+          className="hover:text-[#850B1B] transition-colors whitespace-nowrap shrink-0"
+        >
+          {product.fabricWidth} বহর কাপড়
+        </Link>
+        <ChevronRight className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+        <Link
+          to={`/fabric/${product.fabricWidth}-bahar/${catSlug}`}
+          className="hover:text-[#850B1B] transition-colors whitespace-nowrap shrink-0"
+        >
+          {product.category}
+        </Link>
+        <ChevronRight className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+        <span className="text-[#850B1B] font-semibold truncate max-w-[200px] sm:max-w-xs">
+          {product.name}
+        </span>
+      </nav>
 
       {/* 2. Main Contiguous Purchase Module (Sticky Gallery Left + Sticky Purchase Module Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-8 lg:gap-14 items-start">
@@ -859,7 +960,7 @@ export const ProductDetailsPage: React.FC = () => {
           <div className="space-y-2 sm:space-y-3 border-b border-[#E6DFD3] pb-3 sm:pb-6">
             <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px] sm:text-sm text-[#1C1B19]/65">
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                <span className="font-semibold text-[#850B1B] bg-[#FAF6F0] px-2 py-0.5 sm:px-2.5 rounded border border-[#D5A64A]/45">
+                <span className="font-semibold text-[#850B1B] bg-[#FAF8F5] px-2 py-0.5 sm:px-2.5 rounded border border-[#D5A64A]/45">
                   {product.fabricWidth} হাত বহর ({product.fabricWidth === '3.5' ? '৫৬–৬০ ইঞ্চি' : '৪২–৪৪ ইঞ্চি'})
                 </span>
                 <span aria-hidden="true">·</span>
@@ -869,7 +970,7 @@ export const ProductDetailsPage: React.FC = () => {
               </div>
 
               {product.rating && (
-                <div className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold text-[#850B1B] bg-[#FAF6F0] px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full border border-[#D5A64A]/40">
+                <div className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold text-[#850B1B] bg-[#FAF8F5] px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full border border-[#D5A64A]/40">
                   <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-[#D5A64A] text-[#D5A64A]" />
                   <span>{product.rating}</span>
                   {product.reviewCount && (
@@ -939,17 +1040,17 @@ export const ProductDetailsPage: React.FC = () => {
 
             {/* Horizontal Outfit Cards Row — Box-shaped, larger size for crystal-clear view */}
             <div className="flex items-stretch gap-2.5 sm:gap-3 overflow-x-auto pb-1.5 pt-1 scrollbar-thin scrollbar-thumb-[#D5A64A]/30">
-              {PRODUCT_OUTFIT_OPTIONS.map((outfit) => {
+              {availableOutfits.map((outfit) => {
                 const isSelected = selectedOutfitId === outfit.id;
                 return (
                   <button
                     key={outfit.id}
                     type="button"
                     onClick={() => handleSelectOutfit(outfit)}
-                    className={`group w-[96px] sm:w-[116px] shrink-0 rounded-lg overflow-hidden text-left transition-all cursor-pointer relative flex flex-col ${
+                    className={`group w-[96px] sm:w-[116px] shrink-0 rounded-xl overflow-hidden text-left transition-all duration-200 cursor-pointer relative flex flex-col active:scale-95 hover:-translate-y-0.5 ${
                       isSelected
-                        ? 'border-2 border-[#850B1B] shadow-sm bg-white'
-                        : 'border border-[#DCD3C5] hover:border-[#850B1B]/50 bg-white'
+                        ? 'border-2 border-[#850B1B] shadow-sm bg-white ring-2 ring-[#850B1B]/15'
+                        : 'border border-[#DCD3C5] hover:border-[#850B1B]/50 bg-white hover:shadow-xs'
                     }`}
                   >
                     {/* Selected Checkmark Badge (top-right, box shape) */}
@@ -1149,15 +1250,16 @@ export const ProductDetailsPage: React.FC = () => {
                       type="button"
                       onClick={() => handleStandardQuantityChange(standardQuantity - 1)}
                       disabled={standardQuantity <= 1}
-                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-[#FAF8F4] border border-[#DCD3C2] text-sm font-bold text-[#850B1B] hover:bg-[#EDE5D9]/60 disabled:opacity-40 flex items-center justify-center cursor-pointer transition-colors"
+                      className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#FAF8F5] border border-[#DCD3C2] hover:border-[#850B1B] text-base font-bold text-[#850B1B] hover:bg-[#EDE5D9]/60 active:scale-90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center cursor-pointer transition-all shadow-2xs"
+                      aria-label="পরিমাণ কমান"
                     >
                       −
                     </button>
-                    <div className="px-2.5 py-0.5 sm:px-3 sm:py-1 bg-[#FAF8F4] border border-[#DCD3C2] rounded-lg text-center min-w-[66px]">
-                      <span className="text-xs font-bold text-[#1C1B19] tabular-nums block leading-tight">
+                    <div className="px-3 py-1 bg-[#FAF8F5] border border-[#DCD3C2] rounded-xl text-center min-w-[72px] shadow-2xs">
+                      <span className="text-xs sm:text-sm font-bold text-[#1C1B19] tabular-nums block leading-tight">
                         {standardQuantity}টি
                       </span>
-                      <span className="text-[10px] font-semibold text-[#850B1B] tabular-nums block leading-none">
+                      <span className="text-[11px] font-semibold text-[#850B1B] tabular-nums block leading-none">
                         {yards} গজ
                       </span>
                     </div>
@@ -1165,7 +1267,8 @@ export const ProductDetailsPage: React.FC = () => {
                       type="button"
                       onClick={() => handleStandardQuantityChange(standardQuantity + 1)}
                       disabled={standardQuantity >= maxStandardQuantity}
-                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-[#FAF8F4] border border-[#DCD3C2] text-sm font-bold text-[#850B1B] hover:bg-[#EDE5D9]/60 disabled:opacity-40 flex items-center justify-center cursor-pointer transition-colors"
+                      className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#FAF8F5] border border-[#DCD3C2] hover:border-[#850B1B] text-base font-bold text-[#850B1B] hover:bg-[#EDE5D9]/60 active:scale-90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center cursor-pointer transition-all shadow-2xs"
+                      aria-label="পরিমাণ বাড়ান"
                     >
                       +
                     </button>
@@ -1461,23 +1564,36 @@ export const ProductDetailsPage: React.FC = () => {
             )}
           </div>
 
-          {/* Primary Action Buttons: Add to Cart & Buy Now — Matches image_6859b2cb.png */}
+          {/* Primary Action Buttons: Add to Cart & Buy Now — Apple HIG tactile feedback */}
           <div className="grid grid-cols-2 gap-2.5 sm:gap-4 pt-1 sm:pt-2">
             <button
               type="button"
-              onClick={() => addToCart(product, combinedTotalYards, selectedColor, true, buildCustomizationPayload())}
+              onClick={handleAddToCartWithFeedback}
               disabled={product.stockYards <= 0}
-              className="py-2.5 px-3 sm:py-3.5 sm:px-6 bg-[#FAF6EE] hover:bg-[#F3ECE0] text-[#850B1B] border border-[#850B1B] rounded-xl text-xs sm:text-base font-bold transition-all flex items-center justify-center gap-1.5 sm:gap-2.5 cursor-pointer disabled:opacity-50 shadow-2xs"
+              className={`min-h-[48px] sm:min-h-[52px] py-2.5 px-3 sm:py-3.5 sm:px-6 rounded-2xl text-xs sm:text-base font-bold transition-all flex items-center justify-center gap-1.5 sm:gap-2.5 cursor-pointer disabled:opacity-50 active:scale-[0.98] shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#850B1B] ${
+                isAddedToCart
+                  ? 'bg-emerald-700 text-white border border-emerald-700'
+                  : 'bg-[#FAF8F5] hover:bg-[#F3ECE0] text-[#850B1B] border border-[#850B1B]'
+              }`}
             >
-              <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5 text-[#850B1B] shrink-0" />
-              <span className="whitespace-nowrap">কার্টে যোগ করুন</span>
+              {isAddedToCart ? (
+                <>
+                  <Check className="w-4 h-4 sm:w-5 sm:h-5 text-white stroke-[2.5]" />
+                  <span className="whitespace-nowrap">ব্যাগে যোগ হয়েছে!</span>
+                </>
+              ) : (
+                <>
+                  <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5 text-[#850B1B] shrink-0" />
+                  <span className="whitespace-nowrap">কার্টে যোগ করুন</span>
+                </>
+              )}
             </button>
 
             <button
               type="button"
               onClick={() => buyNow(product, combinedTotalYards, selectedColor, buildCustomizationPayload())}
               disabled={product.stockYards <= 0}
-              className="py-2.5 px-3 sm:py-3.5 sm:px-6 bg-[#850B1B] hover:bg-[#6B0815] text-white rounded-xl text-xs sm:text-base font-bold transition-all flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer disabled:opacity-50 shadow-2xs"
+              className="min-h-[48px] sm:min-h-[52px] py-2.5 px-3 sm:py-3.5 sm:px-6 bg-gradient-to-b from-[#850B1B] via-[#750917] to-[#5C0712] hover:from-[#960D1F] hover:to-[#4C050E] text-white rounded-2xl text-xs sm:text-base font-bold transition-all flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer disabled:opacity-50 active:scale-[0.98] shadow-[0_4px_16px_rgba(133,11,27,0.28),inset_0_1px_0_rgba(255,255,255,0.2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#850B1B]"
             >
               <span className="truncate">এখনই কিনুন · ৳{totalPrice}</span>
             </button>

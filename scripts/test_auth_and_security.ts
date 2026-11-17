@@ -143,6 +143,35 @@ describe('Authentication, Session Lifecycle, RBAC & BOLA/IDOR Security', () => {
     userId = json.user.id;
   });
 
+  it('registers a customer with email only (phone is optional) and allows login via email', async () => {
+    const emailOnlyRes = await apiReq('/api/v1/auth/register', {
+      method: 'POST',
+      body: {
+        fullName: 'ইমেইল ইউজার',
+        email: 'emailonly.user@example.com',
+        password: 'Password@123',
+      },
+    });
+    expect(emailOnlyRes.status).toBe(200);
+    const emailOnlyJson = (await emailOnlyRes.json()) as any;
+    expect(emailOnlyJson.success).toBe(true);
+    expect(typeof emailOnlyJson.token).toBe('string');
+    expect(emailOnlyJson.user.email).toBe('emailonly.user@example.com');
+    expect(emailOnlyJson.user.phone).toBe('');
+
+    const loginRes = await apiReq('/api/v1/auth/login', {
+      method: 'POST',
+      body: {
+        identifier: 'emailonly.user@example.com',
+        password: 'Password@123',
+      },
+    });
+    expect(loginRes.status).toBe(200);
+    const loginJson = (await loginRes.json()) as any;
+    expect(loginJson.success).toBe(true);
+    expect(loginJson.user.email).toBe('emailonly.user@example.com');
+  });
+
   it('prevents duplicate phone AND duplicate email registration (409)', async () => {
     const dupPhone = await apiReq('/api/v1/auth/register', {
       method: 'POST',

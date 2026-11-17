@@ -137,7 +137,7 @@ export const MobileBottomNav: React.FC = () => {
                     key={idx}
                     type="button"
                     onClick={() => handleNavClick(item.action)}
-                    className="w-full min-h-[48px] px-3 py-2.5 rounded-xl bg-[#FAF6F0] hover:bg-[#F3E8D8] border border-[#E6D6C1] flex items-center justify-between gap-2 text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
+                    className="w-full min-h-[48px] px-3 py-2.5 rounded-xl bg-[#FAF8F5] hover:bg-[#F3E8D8] active:scale-[0.98] border border-[#E6D6C1] flex items-center justify-between gap-2 text-left transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
                   >
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">

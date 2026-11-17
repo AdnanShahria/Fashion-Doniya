@@ -17,6 +17,7 @@ import {
 } from '../../../backend/server/db/schemas/index';
 import type {
   Product,
+  ProductCustomMeasurementConfig,
   Category,
   Order,
   OrderTrackingHistory,
@@ -39,11 +40,16 @@ import {
   INITIAL_HOMEPAGE_CONFIG,
   INITIAL_CONTENT_CONFIG,
   INITIAL_NAVIGATION_CONFIG,
+  INITIAL_FOOTER_CONFIG,
   createInitialFabricCollectionsState,
 } from '../../../frontend/src/data/seedData';
 import { safeJsonParse, slugify } from './helpers';
 
 export function mapProductRow(row: typeof products.$inferSelect): Product {
+  const customCfg = row.customMeasurementConfig
+    ? safeJsonParse<ProductCustomMeasurementConfig | undefined>(row.customMeasurementConfig, undefined)
+    : undefined;
+
   return {
     id: row.id,
     slug: row.slug || slugify(row.nameEn || row.name) || row.id,
@@ -71,9 +77,11 @@ export function mapProductRow(row: typeof products.$inferSelect): Product {
     isActive: Boolean(row.isActive),
     rating: row.rating != null ? Number(row.rating) : undefined,
     reviewCount: row.reviewCount != null ? Number(row.reviewCount) : undefined,
-    customMeasurementConfig: row.customMeasurementConfig
-      ? safeJsonParse(row.customMeasurementConfig, undefined)
-      : undefined,
+    customMeasurementConfig: customCfg,
+    supportedOutfits:
+      (Array.isArray(customCfg?.supportedOutfits) && customCfg.supportedOutfits.length > 0)
+        ? customCfg.supportedOutfits
+        : undefined,
     seoTitle: row.seoTitle || undefined,
     seoDescription: row.seoDescription || undefined,
     seoKeywords: row.seoKeywords || undefined,
@@ -211,6 +219,7 @@ export function mergeSettingsWithDefaults(
               : INITIAL_NAVIGATION_CONFIG.footerSupportItems,
         }
       : INITIAL_NAVIGATION_CONFIG,
+    footerConfig: partial.footerConfig || base.footerConfig || INITIAL_FOOTER_CONFIG,
   };
 }
 

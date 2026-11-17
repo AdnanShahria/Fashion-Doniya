@@ -89,7 +89,7 @@ export const CalculatorPage: React.FC = () => {
           {REFERENCE_CHART_ROWS.map((row) => (
             <div
               key={row.garment}
-              className="p-3 rounded-xl bg-[#FAF6F0] border border-[#E5D4BE] space-y-2 min-w-0"
+              className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E5D4BE] space-y-2 min-w-0"
             >
               <div className="font-bold text-sm text-[#2B1615]">{row.garment}</div>
               <div className="grid grid-cols-2 gap-2 text-xs">

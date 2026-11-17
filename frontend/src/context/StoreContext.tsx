@@ -100,9 +100,9 @@ interface StoreContextType {
   loginUser: (identifier: string, password: string) => Promise<{ success: boolean; message?: string }>;
   registerUser: (
     fullName: string,
-    phone: string,
+    emailOrPhone: string,
     password: string,
-    email?: string
+    optionalPhoneOrEmail?: string
   ) => Promise<{ success: boolean; message?: string }>;
   requestPasswordResetOtp: (
     identifier: string
@@ -985,16 +985,23 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const registerUser = async (
     fullName: string,
-    phone: string,
+    emailOrPhone: string,
     password: string,
-    email?: string
+    optionalPhoneOrEmail?: string
   ): Promise<{ success: boolean; message?: string }> => {
     try {
+      const isFirstArgEmail = emailOrPhone.includes('@');
+      const email = isFirstArgEmail
+        ? emailOrPhone.trim().toLowerCase()
+        : (optionalPhoneOrEmail?.trim().toLowerCase() || '');
+      const rawPhone = isFirstArgEmail ? (optionalPhoneOrEmail || '') : emailOrPhone;
+      const phone = rawPhone ? StorageService.normalizePhone(rawPhone) : '';
+
       const r = await api.post('/auth/register', {
-        fullName,
-        phone,
+        fullName: fullName.trim(),
+        email: email || undefined,
+        ...(phone ? { phone } : {}),
         password,
-        ...(email?.trim() ? { email: email.trim() } : {}),
       });
       if (r.data?.success && r.data.user && r.data.token) {
         useAuthStore.getState().setAuth(r.data.user, r.data.token);

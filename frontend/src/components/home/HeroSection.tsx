@@ -660,7 +660,7 @@ export const HeroSection: React.FC = () => {
             <button
               type="button"
               onClick={() => navigateTo('calculator')}
-              className="min-h-[44px] py-2.5 px-3 rounded-full bg-[#FAF6F0] active:bg-[#F1E6D6] active:scale-[0.98] text-[#6B0812] border-[1.5px] border-[#C59B48] font-bold text-[13px] shadow-[0_2px_8px_rgba(138,90,16,0.10)] flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] focus-visible:ring-offset-2"
+              className="min-h-[44px] py-2.5 px-3 rounded-full bg-[#FAF8F5] active:bg-[#F1E6D6] active:scale-[0.98] text-[#6B0812] border-[1.5px] border-[#C59B48] font-bold text-[13px] shadow-[0_2px_8px_rgba(138,90,16,0.10)] flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10] focus-visible:ring-offset-2"
             >
               <Calculator className="w-4 h-4 text-[#8A5A10] stroke-[2] shrink-0" />
               <span>{currentSlide.secondaryCta}</span>

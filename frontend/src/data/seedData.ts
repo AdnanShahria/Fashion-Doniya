@@ -26,7 +26,8 @@ import type {
   ActivityLog,
   FabricWidthCardConfig,
   FloatingContactItem,
-  FloatingWidgetConfig
+  FloatingWidgetConfig,
+  FooterConfig
 } from '../types/index.ts';
 
 export const INITIAL_CATEGORIES: Category[] = [
@@ -1555,6 +1556,51 @@ export const INITIAL_FLOATING_WIDGET_CONFIG: FloatingWidgetConfig = {
   ]
 };
 
+export const INITIAL_FOOTER_CONFIG: FooterConfig = {
+  logoUrl: '',
+  title: 'Fashion Doniya',
+  tagline: 'Fashion Doniya — Premium Textile & Fabric Atelier',
+  aboutDesc:
+    'বাংলাদেশের রুচিশীল ক্রেতাদের জন্য প্রিমিয়াম কোয়ালিটির আনস্টিচড থান ও গজ কাপড়ের বিশ্বস্ত শোরুম। আপনার পছন্দমতো সঠিক গজ মেপে কিনুন সহজেই।',
+  address: 'বাড়ি #১২, রোড #০৪, ধানমন্ডি, ঢাকা - ১২০৫',
+  phone: '+880 1712-345678',
+  email: 'support@fashiondoniyabd.com',
+  workingHours: 'প্রতিদিন সকাল ১০:০০ – রাত ১০:০০ (Everyday: 10:00 AM – 10:00 PM)',
+  quickLinks: [
+    { id: 'ql-1', title: 'সকল কাপড় (All Fabrics)', url: '/shop', isActive: true },
+    { id: 'ql-2', title: '৩.৫ বহর কাপড় (3.5 Bohor)', url: '/shop-3-5', isActive: true },
+    { id: 'ql-3', title: '২.৫ বহর কাপড় (2.5 Bohor)', url: '/shop-2-5', isActive: true },
+    { id: 'ql-4', title: 'গজ ক্যালকুলেটর (Yard Calculator)', url: '/calculator', isActive: true },
+    { id: 'ql-5', title: 'অর্ডার ট্র্যাকিং (Order Tracking)', url: '/order-tracking', isActive: true },
+    { id: 'ql-6', title: 'আমাদের সম্পর্কে (About Atelier)', url: '/about', isActive: true },
+  ],
+  socialLinks: [
+    { id: 'soc-1', platform: 'facebook', label: 'Facebook', url: 'https://www.facebook.com/share/1EwKnnudVx/', isActive: true, handle: '@fashiondoniyabd' },
+    { id: 'soc-2', platform: 'instagram', label: 'Instagram', url: 'https://instagram.com', isActive: true, handle: '@fashiondoniya' },
+    { id: 'soc-3', platform: 'youtube', label: 'YouTube', url: 'https://youtube.com', isActive: true, handle: '@fashiondoniyabd' },
+    { id: 'soc-4', platform: 'tiktok', label: 'TikTok', url: 'https://tiktok.com', isActive: true, handle: '@fashiondoniya' },
+    { id: 'soc-5', platform: 'whatsapp', label: 'WhatsApp', url: '+8801712345678', isActive: true, handle: '+880 1712-345678' },
+  ],
+  socialHighlightText: 'সকল নতুন থান কালেকশন দেখুন →',
+  socialHighlightUrl: '/shop',
+  socialHighlightEnabled: true,
+  newsletterEnabled: true,
+  newsletterTitle: 'NEWSLETTER',
+  newsletterDesc: 'নতুন কাপড়ের কালেকশন ও এক্সক্লুসিভ অফারের আপডেট সবার আগে পান।',
+  newsletterBtnText: 'SUBSCRIBE →',
+  newsletterPlaceholder: 'আপনার ইমেইল লিখুন...',
+  copyrightText: '© {year} Fashion Doniya. সর্বস্বত্ব সংরক্ষিত।',
+  showPartnerBadge: true,
+  bottomLinks: [
+    { id: 'bot-1', title: 'শর্তাবলী', url: '/terms', isActive: true },
+    { id: 'bot-2', title: 'ডেলিভারি ও রিটার্ন নীতি', url: '/delivery-policy', isActive: true },
+    { id: 'bot-3', title: 'প্রাইভেসী পলিসি', url: '/privacy-policy', isActive: true },
+    { id: 'bot-4', title: 'Cookies', url: '/privacy-policy', isActive: true },
+  ],
+  showServiceFeatures: true,
+  curvedContainer: true,
+};
+
 export const INITIAL_SETTINGS: StoreSettings = {
   storeName: 'Fashion Doniya BD',
   logoUrl: '',
@@ -1577,6 +1623,7 @@ export const INITIAL_SETTINGS: StoreSettings = {
   facebookUrl: 'https://www.facebook.com/share/1EwKnnudVx/',
   instagramUrl: 'https://instagram.com',
   youtubeUrl: 'https://youtube.com',
+  tiktokUrl: 'https://tiktok.com',
   maintenanceMode: false,
   maintenanceMessage: 'আমাদের ওয়েবসাইটে নতুন কাপড়ের কালেকশন ও সিস্টেম আপডেট চলছে। খুব শীঘ্রই আমরা ফিরে আসছি। জরুরি অর্ডারের জন্য WhatsApp করুন।',
   coupons: [
@@ -1590,7 +1637,8 @@ export const INITIAL_SETTINGS: StoreSettings = {
   seoConfig: INITIAL_SEO_CONFIG,
   campaigns: INITIAL_CAMPAIGNS,
   floatingWidgetConfig: INITIAL_FLOATING_WIDGET_CONFIG,
-  addonFabricCollections: INITIAL_ADDON_FABRIC_COLLECTIONS
+  addonFabricCollections: INITIAL_ADDON_FABRIC_COLLECTIONS,
+  footerConfig: INITIAL_FOOTER_CONFIG
 };
 
 export const INITIAL_TRACKING_HISTORY: OrderTrackingHistory[] = [];
@@ -1871,7 +1919,7 @@ export const INITIAL_FABRIC_DESIGN_SETTINGS: Record<FabricCollectionType, Fabric
   '3.5_bahar': {
     id: 'fdesign-35-bahar',
     collection_type: '3.5_bahar',
-    backgroundColor: '#FAF6F0',
+    backgroundColor: '#FAF8F5',
     cardBackgroundColor: '#FFFCF7',
     textColor: '#850B1B',
     bodyTextColor: '#241815',
@@ -1893,7 +1941,7 @@ export const INITIAL_FABRIC_DESIGN_SETTINGS: Record<FabricCollectionType, Fabric
   '2.5_bahar': {
     id: 'fdesign-25-bahar',
     collection_type: '2.5_bahar',
-    backgroundColor: '#FAF6F0',
+    backgroundColor: '#FAF8F5',
     cardBackgroundColor: '#FFFCF7',
     textColor: '#850B1B',
     bodyTextColor: '#241815',

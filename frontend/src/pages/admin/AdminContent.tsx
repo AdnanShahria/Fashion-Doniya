@@ -13,11 +13,12 @@ import {
   Save,
   Plus,
   Trash2,
-  Mail
+  Mail,
+  ArrowRight
 } from 'lucide-react';
 
 export const AdminContent: React.FC = () => {
-  const { settings, refreshData, showToast } = useStore();
+  const { settings, refreshData, showToast, setAdminTab } = useStore();
 
   const hasEditedRef = useRef(false);
   const [contentConfig, setContentConfigRaw] = useState<WebsiteContentConfig>(() => {
@@ -572,9 +573,24 @@ export const AdminContent: React.FC = () => {
       {/* 8. FOOTER CONTENT */}
       {activeTab === 'footer' && (
         <div className="bg-white p-5 rounded-xl border border-[#EDE5D9] shadow-xs space-y-4 text-xs">
-          <h3 className="text-sm font-bold text-[#242424] border-b border-[#EDE5D9] pb-2">
-            ফুটার কন্টেন্ট ও কপিরাইট (Footer Content)
-          </h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#EDE5D9] pb-3">
+            <div>
+              <h3 className="text-sm font-bold text-[#242424]">
+                ফুটার কন্টেন্ট ও কপিরাইট (Footer Content)
+              </h3>
+              <p className="text-[11px] text-neutral-500 mt-0.5">
+                এখানে সাধারণ টেক্সট পরিবর্তন করুন, অথবা সম্পূর্ণ কার্ভড ফুটার ও সোশ্যাল হাব ম্যানেজ করুন।
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAdminTab('footer')}
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#850B1B] to-[#5e0712] text-white text-xs font-bold hover:shadow-md transition-all flex items-center gap-1.5 cursor-pointer self-start sm:self-center"
+            >
+              <span>ডেডিকেটেড ফুটার ও সোশ্যাল ম্যানেজার খুলুন</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2">

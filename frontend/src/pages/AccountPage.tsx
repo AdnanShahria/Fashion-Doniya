@@ -145,20 +145,30 @@ export const AccountPage: React.FC = () => {
     }
   }, [currentUser]);
 
-  // Customer's order history (strict phone/user match — never match by fullName!)
+  // Customer's order history (strict email/phone match — never match by fullName alone!)
   const allOrders = orderService.getAllOrders();
   const userOrders = currentUser
     ? serverUserOrders !== null
       ? serverUserOrders
-      : allOrders.filter(
-          (o) =>
-            StorageService.normalizePhone(o.customer.phone) ===
-            StorageService.normalizePhone(currentUser.phone)
-        )
+      : allOrders.filter((o) => {
+          const userEmail = (currentUser.email || '').trim().toLowerCase();
+          const orderEmail = (o.customer?.email || '').trim().toLowerCase();
+          if (userEmail && orderEmail && userEmail === orderEmail) return true;
+          if (currentUser.phone && o.customer?.phone) {
+            return (
+              StorageService.normalizePhone(o.customer.phone) ===
+              StorageService.normalizePhone(currentUser.phone)
+            );
+          }
+          return false;
+        })
     : [];
 
-  const isPhoneLike = (val: string) =>
-    !val.includes('@') && /^[\d০-৯+\s-]*$/.test(val.trim());
+  const isPhoneLike = (val: string) => {
+    const trimmed = val.trim();
+    if (!trimmed || trimmed.includes('@')) return false;
+    return /^(?:\+?880|01)\d*$/.test(trimmed) || /^[\d০-৯+\s-]{3,}$/.test(trimmed);
+  };
 
   const handleSendResetOtp = async () => {
     setFeedback(null);
@@ -179,7 +189,7 @@ export const AccountPage: React.FC = () => {
       if (!/^01[3-9]\d{8}$/.test(normalized)) {
         setFeedback({
           type: 'error',
-          text: 'সঠিক ১১ ডিজিটের মোবাইল নম্বর অথবা ইমেইল দিন (যেমন: 017XXXXXXXX)',
+          text: 'সঠিক ইমেইল ঠিকানা অথবা ১১ ডিজিটের মোবাইল নম্বর দিন',
         });
         return;
       }
@@ -194,7 +204,7 @@ export const AccountPage: React.FC = () => {
         type: 'success',
         text: res.devOtp
           ? `${res.message} (ডেভেলপমেন্ট OTP: ${res.devOtp})`
-          : res.message || '৬ সংখ্যার OTP পাঠানো হয়েছে।',
+          : res.message || 'আপনার ইমেইলে ৬ সংখ্যার OTP পাঠানো হয়েছে।',
       });
     } else {
       setFeedback({
@@ -218,7 +228,7 @@ export const AccountPage: React.FC = () => {
       if (!/^\d{6}$/.test(resetOtp.trim())) {
         setFeedback({
           type: 'error',
-          text: 'আপনার ইমেইল/ফোনে পাঠানো ৬ ডিজিটের ভেরিফিকেশন কোডটি (OTP) দিন।',
+          text: 'আপনার ইমেইলে পাঠানো ৬ ডিজিটের ভেরিফিকেশন কোডটি (OTP) দিন।',
         });
         return;
       }
@@ -263,26 +273,30 @@ export const AccountPage: React.FC = () => {
       return;
     }
 
-    // 2. Register Flow
+    // 2. Register Flow (Email-focused, zero SMS dependency)
     if (authTab === 'register') {
       if (regName.trim().length < 2) {
         setFeedback({ type: 'error', text: 'অনুগ্রহ করে আপনার পুরো নাম লিখুন' });
         return;
       }
-      const normalizedRegPhone = StorageService.normalizePhone(regPhone);
-      if (!/^01[3-9]\d{8}$/.test(normalizedRegPhone)) {
+      const cleanEmail = regEmail.trim().toLowerCase();
+      if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
         setFeedback({
           type: 'error',
-          text: 'সঠিক ১১ ডিজিটের বাংলাদেশী মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)',
+          text: 'সঠিক ইমেইল ঠিকানা দিন (যেমন: name@example.com)। এতে অ্যাকাউন্ট ভেরিফিকেশন কোড পাঠানো হবে।',
         });
         return;
       }
-      if (regEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail.trim().toLowerCase())) {
-        setFeedback({
-          type: 'error',
-          text: 'সঠিক ইমেইল ঠিকানা দিন অথবা ঘরটি ফাঁকা রাখুন।',
-        });
-        return;
+      let normalizedRegPhone = '';
+      if (regPhone.trim()) {
+        normalizedRegPhone = StorageService.normalizePhone(regPhone);
+        if (!/^01[3-9]\d{8}$/.test(normalizedRegPhone)) {
+          setFeedback({
+            type: 'error',
+            text: 'মোবাইল নম্বর দিলে সঠিক ১১ ডিজিট লিখুন (যেমন: 017XXXXXXXX) অথবা ফাঁকা রাখুন।',
+          });
+          return;
+        }
       }
       if (!regPassword.trim() || regPassword.length < 6) {
         setFeedback({ type: 'error', text: 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে' });
@@ -295,19 +309,24 @@ export const AccountPage: React.FC = () => {
         });
         return;
       }
-      const regRes = await registerUser(regName, normalizedRegPhone, regPassword, regEmail);
+      const regRes = await registerUser(
+        regName.trim(),
+        cleanEmail,
+        regPassword,
+        normalizedRegPhone || undefined
+      );
       if (!regRes.success) {
         setFeedback({
           type: 'error',
           text:
             regRes.message ||
-            'এই মোবাইল নম্বর বা ইমেইল দিয়ে ইতিমধ্যে অ্যাকাউন্ট খোলা আছে অথবা তথ্য সঠিক নয়।',
+            'এই ইমেইল দিয়ে ইতিমধ্যে অ্যাকাউন্ট খোলা আছে অথবা তথ্য সঠিক নয়।',
         });
       }
       return;
     }
 
-    // 3. Login Flow
+    // 3. Login Flow (Email-first with phone fallback)
     const rawLogin = loginIdentifier.trim();
     let normalizedLoginId = rawLogin;
     if (rawLogin.includes('@')) {
@@ -324,7 +343,7 @@ export const AccountPage: React.FC = () => {
       if (!/^01[3-9]\d{8}$/.test(normalized)) {
         setFeedback({
           type: 'error',
-          text: 'সঠিক ১১ ডিজিটের বাংলাদেশী মোবাইল নম্বর অথবা ইমেইল দিন',
+          text: 'সঠিক ইমেইল ঠিকানা অথবা ১১ ডিজিটের বাংলাদেশী মোবাইল নম্বর দিন',
         });
         return;
       }
@@ -345,7 +364,7 @@ export const AccountPage: React.FC = () => {
         type: 'error',
         text:
           loginRes.message ||
-          'মোবাইল নম্বর/ইমেইল বা পাসওয়ার্ড সঠিক নয়। অনুগ্রহ করে পুনরায় চেষ্টা করুন।',
+          'ইমেইল বা পাসওয়ার্ড সঠিক নয়। অনুগ্রহ করে পুনরায় চেষ্টা করুন।',
       });
     }
   };
@@ -354,11 +373,11 @@ export const AccountPage: React.FC = () => {
     if (!import.meta.env.DEV) return;
     setIsForgotPassword(false);
     setAuthTab('login');
-    setLoginIdentifier('01711223344');
-    setLoginPassword('123456');
+    setLoginIdentifier('amina.test@example.com');
+    setLoginPassword('TestPassword#2026');
     setFeedback({
       type: 'success',
-      text: 'ডেমো অ্যাকাউন্টের নম্বর ও পাসওয়ার্ড বসানো হয়েছে। এখন "লগইন করুন" বাটনে চাপুন।',
+      text: 'ডেমো গ্রাহকের ইমেইল ও পাসওয়ার্ড বসানো হয়েছে। এখন "লগইন করুন" বাটনে চাপুন।',
     });
   };
 
@@ -400,7 +419,7 @@ export const AccountPage: React.FC = () => {
 
   if (!currentUser) {
     return (
-      <div className="w-full px-3 pt-1.5 pb-6 md:py-10 bg-[#FAF6F0]">
+      <div className="w-full px-3 pt-1.5 pb-6 md:py-10 bg-[#FAF8F5]">
         <div className="max-w-100 md:max-w-107.5 mx-auto bg-white rounded-2xl border border-[#E5D4C0] shadow-[0_10px_28px_-8px_rgba(107,8,18,0.14)] overflow-hidden">
           {/* Top Maroon-Gold Accent Bar */}
           <div className="h-1.5 w-full bg-linear-to-r from-[#6B0812] via-[#9E0B16] to-[#C5A46D]" />
@@ -502,10 +521,15 @@ export const AccountPage: React.FC = () => {
               {/* ==================== FORGOT PASSWORD FORM ==================== */}
               {isForgotPassword ? (
                 <>
+                  <div className="p-2.5 rounded-xl bg-[#F6EDE0] border border-[#E2D0B8] text-[11px] text-[#5C3A38] flex items-start gap-2 leading-relaxed">
+                    <Mail className="w-4 h-4 text-[#6B0812] shrink-0 mt-0.5" />
+                    <span>আপনার অ্যাকাউন্টের ইমেইল দিন। পাসওয়ার্ড পরিবর্তনের জন্য আপনার ইমেইলে বিনামূল্যে ৬ সংখ্যার ভেরিফিকেশন OTP কোড পাঠানো হবে।</span>
+                  </div>
+
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-[11px] font-bold text-[#2B1816]">
-                        নিবন্ধিত মোবাইল নম্বর বা ইমেইল <span className="text-[#9E0B16]">*</span>
+                        নিবন্ধিত ইমেইল ঠিকানা <span className="text-[#9E0B16]">*</span>
                       </label>
                       <button
                         type="button"
@@ -541,7 +565,7 @@ export const AccountPage: React.FC = () => {
                             setResetOtp('');
                           }
                         }}
-                        placeholder="017XXXXXXXX বা name@example.com"
+                        placeholder="name@example.com (বা মোবাইল নম্বর)"
                         required
                         className="w-full px-3 py-2 text-xs font-semibold text-[#241614] placeholder:text-[#8C7A72] bg-transparent outline-none"
                       />
@@ -553,16 +577,17 @@ export const AccountPage: React.FC = () => {
                       type="button"
                       disabled={isSendingOtp}
                       onClick={handleSendResetOtp}
-                      className="w-full py-2.5 bg-[#6B0812] hover:bg-[#850B16] disabled:opacity-60 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                      className="w-full py-2.5 bg-[#6B0812] hover:bg-[#850B16] disabled:opacity-60 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-2"
                     >
-                      {isSendingOtp ? 'OTP পাঠানো হচ্ছে...' : 'ভেরিফিকেশন কোড (OTP) পাঠান'}
+                      <Mail className="w-4 h-4" />
+                      <span>{isSendingOtp ? 'OTP পাঠানো হচ্ছে...' : 'ইমেইলে OTP কোড পাঠান'}</span>
                     </button>
                   ) : (
                     <>
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <label className="text-[11px] font-bold text-[#2B1816]">
-                            ৬ ডিজিটের OTP কোড <span className="text-[#9E0B16]">*</span>
+                            ইমেইলে প্রাপ্ত ৬ ডিজিটের OTP <span className="text-[#9E0B16]">*</span>
                           </label>
                           <button
                             type="button"
@@ -648,7 +673,7 @@ export const AccountPage: React.FC = () => {
                   )}
                 </>
               ) : authTab === 'register' ? (
-                /* ==================== REGISTER FORM ==================== */
+                /* ==================== REGISTER FORM (Email-Focused, Zero-SMS Cost) ==================== */
                 <>
                   <div>
                     <label className="block text-[11px] font-bold text-[#2B1816] mb-1">
@@ -669,7 +694,28 @@ export const AccountPage: React.FC = () => {
 
                   <div>
                     <label className="block text-[11px] font-bold text-[#2B1816] mb-1">
-                      মোবাইল নম্বর <span className="text-[#9E0B16]">*</span>
+                      ইমেইল ঠিকানা <span className="text-[#9E0B16]">*</span>
+                    </label>
+                    <div className="relative flex items-center">
+                      <Mail className="w-4 h-4 text-[#6B0812]/60 absolute left-3 pointer-events-none" />
+                      <input
+                        type="email"
+                        value={regEmail}
+                        onChange={(e) => setRegEmail(e.target.value)}
+                        placeholder="name@example.com"
+                        required
+                        className="w-full bg-[#FDFBF7] border border-[#E2D0B8] focus:border-[#6B0812] rounded-xl pl-9 pr-3 py-2 text-xs font-medium text-[#241614] placeholder:text-[#8C7A72] outline-none transition-colors"
+                      />
+                    </div>
+                    <p className="text-[10px] text-[#7A635B] mt-1 flex items-center gap-1">
+                      <Mail className="w-3 h-3 text-[#6B0812] shrink-0" />
+                      লগইন, অর্ডার নিশ্চিতকরণ ও ভেরিফিকেশন কোড এই ইমেইলে যাবে
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-[#2B1816] mb-1">
+                      মোবাইল নম্বর <span className="text-[#8C7A72] font-normal">(ঐচ্ছিক - ডেলিভারির জন্য)</span>
                     </label>
                     <div className="flex items-stretch rounded-xl border border-[#E2D0B8] focus-within:border-[#6B0812] bg-[#FDFBF7] overflow-hidden transition-colors">
                       <div className="px-2.5 bg-[#F6EDE0] border-r border-[#E2D0B8] flex items-center gap-1 text-xs font-bold text-[#6B0812] shrink-0 select-none">
@@ -681,26 +727,12 @@ export const AccountPage: React.FC = () => {
                         value={regPhone}
                         onChange={(e) => setRegPhone(e.target.value)}
                         placeholder="017XXXXXXXX"
-                        required
                         className="w-full px-3 py-2 text-xs font-semibold text-[#241614] placeholder:text-[#8C7A72] bg-transparent outline-none tabular-nums"
                       />
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-[#2B1816] mb-1">
-                      ইমেইল ঠিকানা <span className="text-[#8C7A72] font-normal">(ঐচ্ছিক)</span>
-                    </label>
-                    <div className="relative flex items-center">
-                      <Mail className="w-4 h-4 text-[#6B0812]/60 absolute left-3 pointer-events-none" />
-                      <input
-                        type="email"
-                        value={regEmail}
-                        onChange={(e) => setRegEmail(e.target.value)}
-                        placeholder="name@example.com"
-                        className="w-full bg-[#FDFBF7] border border-[#E2D0B8] focus:border-[#6B0812] rounded-xl pl-9 pr-3 py-2 text-xs font-medium text-[#241614] placeholder:text-[#8C7A72] outline-none transition-colors"
-                      />
-                    </div>
+                    <p className="text-[10px] text-[#8C7A72] mt-0.5">
+                      হোম ডেলিভারির সময় রাইডারের যোগাযোগের সুবিধার্থে (ঐচ্ছিক)
+                    </p>
                   </div>
 
                   <div>
@@ -764,11 +796,11 @@ export const AccountPage: React.FC = () => {
                   </div>
                 </>
               ) : (
-                /* ==================== LOGIN FORM ==================== */
+                /* ==================== LOGIN FORM (Email-First) ==================== */
                 <>
                   <div>
                     <label className="block text-[11px] font-bold text-[#2B1816] mb-1">
-                      মোবাইল নম্বর অথবা ইমেইল <span className="text-[#9E0B16]">*</span>
+                      ইমেইল ঠিকানা (অথবা মোবাইল নম্বর) <span className="text-[#9E0B16]">*</span>
                     </label>
                     <div className="flex items-stretch rounded-xl border border-[#E2D0B8] focus-within:border-[#6B0812] bg-[#FDFBF7] overflow-hidden transition-colors">
                       <div className="px-2.5 bg-[#F6EDE0] border-r border-[#E2D0B8] flex items-center gap-1 text-xs font-bold text-[#6B0812] shrink-0 select-none">
@@ -782,7 +814,7 @@ export const AccountPage: React.FC = () => {
                         type="text"
                         value={loginIdentifier}
                         onChange={(e) => setLoginIdentifier(e.target.value)}
-                        placeholder="01711223344 বা name@example.com"
+                        placeholder="name@example.com অথবা 01XXXXXXXXX"
                         required
                         className="w-full px-3 py-2 text-xs font-semibold text-[#241614] placeholder:text-[#8C7A72] bg-transparent outline-none"
                       />

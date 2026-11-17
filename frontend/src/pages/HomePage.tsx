@@ -58,7 +58,7 @@ export const HomePage: React.FC = () => {
 
       case 'exclusive':
         return (
-          <section key="exclusive" className="pt-3 sm:pt-10 pb-2 sm:pb-0 bg-[#FAF6F0] w-full min-w-0">
+          <section key="exclusive" className="pt-3 sm:pt-10 pb-2 sm:pb-0 bg-[#FAF8F5] w-full min-w-0">
             <div className="max-w-[1400px] mx-auto px-2.5 sm:px-6 lg:px-8 min-w-0">
               {/* Top Header Row: Left Compact Heading + Right Fabric-Width Filter */}
               <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-4 sm:mb-9 gap-3 sm:gap-5 min-w-0">
@@ -195,7 +195,7 @@ export const HomePage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-3 sm:space-y-14 pb-10 sm:pb-24 bg-[#FAF6F0] w-full min-w-0">
+    <div className="space-y-3 sm:space-y-14 pb-10 sm:pb-24 bg-[#FAF8F5] w-full min-w-0">
       {sections.map((sec) => renderSectionById(sec))}
     </div>
   );

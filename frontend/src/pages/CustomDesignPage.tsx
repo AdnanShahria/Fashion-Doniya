@@ -79,15 +79,27 @@ function resolveColorSwatch(colorName: string, fallbackHex?: string): string {
   return fallbackHex || '#C5A46D';
 }
 
-function getInitialOutfitId(category?: string): string {
+function getInitialOutfitId(
+  category?: string,
+  validOutfitOptions: ProductOutfitOption[] = PRODUCT_OUTFIT_OPTIONS
+): string {
   const clean = (category || '').toLowerCase();
-  if (clean.includes('শর্ট') || clean.includes('short')) return 'short_kameez';
-  if (clean.includes('কটি') || clean.includes('koti') || clean.includes('kurti')) return 'kurti';
-  if (clean.includes('ওড়না') || clean.includes('orna')) return 'kamiz_dupatta';
-  if (clean.includes('লেহেঙ্গা') || clean.includes('lehenga')) return 'lehenga';
-  if (clean.includes('গাউন') || clean.includes('gown')) return 'gown';
-  if (clean.includes('শাড়ি') || clean.includes('শাড়ি') || clean.includes('saree')) return 'saree';
-  return 'kameez';
+  let candidate = 'kameez';
+  if (clean.includes('শর্ট') || clean.includes('short')) candidate = 'short_kameez';
+  else if (clean.includes('কটি') || clean.includes('koti') || clean.includes('kurti')) candidate = 'kurti';
+  else if (clean.includes('ওড়না') || clean.includes('orna')) candidate = 'kamiz_dupatta';
+  else if (clean.includes('লেহেঙ্গা') || clean.includes('lehenga')) candidate = 'lehenga';
+  else if (clean.includes('গাউন') || clean.includes('gown')) candidate = 'gown';
+  else if (clean.includes('শাড়ি') || clean.includes('শাড়ি') || clean.includes('saree')) candidate = 'saree';
+  else candidate = 'kameez';
+
+  if (validOutfitOptions.length > 0) {
+    if (validOutfitOptions.some((o) => o.id === candidate)) {
+      return candidate;
+    }
+    return validOutfitOptions[0].id;
+  }
+  return candidate;
 }
 
 export const CustomDesignPage: React.FC = () => {
@@ -180,11 +192,28 @@ export const CustomDesignPage: React.FC = () => {
     return initial;
   });
 
+  const availableOutfits = useMemo<ProductOutfitOption[]>(() => {
+    const supported =
+      product?.supportedOutfits && product.supportedOutfits.length > 0
+        ? product.supportedOutfits
+        : product?.customMeasurementConfig?.supportedOutfits &&
+          product.customMeasurementConfig.supportedOutfits.length > 0
+        ? product.customMeasurementConfig.supportedOutfits
+        : null;
+
+    if (supported && supported.length > 0) {
+      const filtered = PRODUCT_OUTFIT_OPTIONS.filter((o) => supported.includes(o.id));
+      if (filtered.length > 0) return filtered;
+    }
+    return PRODUCT_OUTFIT_OPTIONS;
+  }, [product]);
+
   const selectedOutfit = useMemo(
     () =>
-      PRODUCT_OUTFIT_OPTIONS.find((o) => o.id === selectedOutfitId) ||
+      availableOutfits.find((o) => o.id === selectedOutfitId) ||
+      availableOutfits[0] ||
       PRODUCT_OUTFIT_OPTIONS[0],
-    [selectedOutfitId]
+    [availableOutfits, selectedOutfitId]
   );
 
   const customConfig = useMemo(() => {
@@ -214,9 +243,21 @@ export const CustomDesignPage: React.FC = () => {
   // Sync defaults when user picks a different product
   useEffect(() => {
     if (!product) return;
-    const initOutfit = getInitialOutfitId(product.category);
+    const supported =
+      product.supportedOutfits && product.supportedOutfits.length > 0
+        ? product.supportedOutfits
+        : product.customMeasurementConfig?.supportedOutfits &&
+          product.customMeasurementConfig.supportedOutfits.length > 0
+        ? product.customMeasurementConfig.supportedOutfits
+        : null;
+    const validOutfits = supported
+      ? PRODUCT_OUTFIT_OPTIONS.filter((o) => supported.includes(o.id))
+      : PRODUCT_OUTFIT_OPTIONS;
+    const initialOutfitList = validOutfits.length > 0 ? validOutfits : PRODUCT_OUTFIT_OPTIONS;
+
+    const initOutfit = getInitialOutfitId(product.category, initialOutfitList);
     setSelectedOutfitId(initOutfit);
-    const matchedOutfit = PRODUCT_OUTFIT_OPTIONS.find((o) => o.id === initOutfit);
+    const matchedOutfit = initialOutfitList.find((o) => o.id === initOutfit) || initialOutfitList[0];
     const initialGaj =
       matchedOutfit?.suggestedYards[product.fabricWidth] ??
       customConfig.standardGaj ??
@@ -804,7 +845,7 @@ export const CustomDesignPage: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
-              {PRODUCT_OUTFIT_OPTIONS.map((outfit) => {
+              {availableOutfits.map((outfit) => {
                 const isSelected = selectedOutfitId === outfit.id;
                 const outfitYards = outfit.suggestedYards[product.fabricWidth];
                 return (

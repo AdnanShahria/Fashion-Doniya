@@ -236,21 +236,23 @@ export const CartPage: React.FC = () => {
                   )}
                 </div>
 
-                {/* Quantity Stepper */}
+                {/* Quantity Stepper (Apple HIG comfortable hit regions) */}
                 <div className="flex items-center gap-2">
-                  <div className="flex items-center border border-[#EDE5D9] bg-[#FAF8F4] rounded-md overflow-hidden">
+                  <div className="flex items-center border border-[#EDE5D9] bg-[#FAF8F5] rounded-xl overflow-hidden shadow-2xs">
                     <button
                       onClick={() => updateCartQuantity(item.id, Number((item.yards - stepAmount).toFixed(2)))}
-                      className="px-2.5 py-1 text-sm font-bold text-[#242424] hover:bg-[#EDE5D9] cursor-pointer"
+                      className="w-8 h-8 flex items-center justify-center text-sm font-bold text-[#242424] hover:bg-[#EDE5D9] active:scale-90 transition-transform cursor-pointer"
+                      aria-label="পরিমাণ কমান"
                     >
-                      -
+                      −
                     </button>
-                    <span className="px-3 py-1 text-xs font-bold tabular-nums text-[#242424] min-w-13.75 text-center">
+                    <span className="px-3 py-1 text-xs font-bold tabular-nums text-[#242424] min-w-[62px] text-center">
                       {item.yards} গজ
                     </span>
                     <button
                       onClick={() => updateCartQuantity(item.id, Number((item.yards + stepAmount).toFixed(2)))}
-                      className="px-2.5 py-1 text-sm font-bold text-[#242424] hover:bg-[#EDE5D9] cursor-pointer"
+                      className="w-8 h-8 flex items-center justify-center text-sm font-bold text-[#242424] hover:bg-[#EDE5D9] active:scale-90 transition-transform cursor-pointer"
+                      aria-label="পরিমাণ বাড়ান"
                     >
                       +
                     </button>
@@ -259,8 +261,9 @@ export const CartPage: React.FC = () => {
                   {/* Remove Item */}
                   <button
                     onClick={() => removeFromCart(item.id)}
-                    className="p-2 text-[#242424]/40 hover:text-rose-600 rounded-md transition-colors cursor-pointer"
+                    className="p-2 text-[#242424]/40 hover:text-rose-600 active:scale-90 rounded-lg transition-all cursor-pointer"
                     title="সরিয়ে ফেলুন"
+                    aria-label="সরিয়ে ফেলুন"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -310,26 +313,28 @@ export const CartPage: React.FC = () => {
               {/* Delivery Destination Toggle */}
               <div className="pt-2 border-t border-[#EDE5D9]/60">
                 <span className="text-[#242424] font-semibold block mb-1.5">ডেলিভারি লোকেশন:</span>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-neutral-100/80 border border-neutral-200/60 text-xs">
                   <button
                     onClick={() => setDeliveryLocation('inside')}
-                    className={`p-2 rounded-md border text-center transition-all cursor-pointer ${
+                    className={`py-2 px-2.5 rounded-lg font-semibold transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-95 ${
                       deliveryLocation === 'inside'
-                        ? 'border-[#C5A46D] bg-white font-bold text-[#242424]'
-                        : 'border-[#EDE5D9] text-[#242424]/70'
+                        ? 'bg-white text-neutral-900 shadow-xs ring-1 ring-black/5'
+                        : 'text-neutral-600 hover:text-neutral-900'
                     }`}
                   >
-                    ঢাকা সিটি (৳{settings.insideDhakaDeliveryFee})
+                    <span>ঢাকা সিটি</span>
+                    <span className="text-[10px] text-neutral-500 font-normal">৳{settings.insideDhakaDeliveryFee}</span>
                   </button>
                   <button
                     onClick={() => setDeliveryLocation('outside')}
-                    className={`p-2 rounded-md border text-center transition-all cursor-pointer ${
+                    className={`py-2 px-2.5 rounded-lg font-semibold transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-95 ${
                       deliveryLocation === 'outside'
-                        ? 'border-[#C5A46D] bg-white font-bold text-[#242424]'
-                        : 'border-[#EDE5D9] text-[#242424]/70'
+                        ? 'bg-white text-neutral-900 shadow-xs ring-1 ring-black/5'
+                        : 'text-neutral-600 hover:text-neutral-900'
                     }`}
                   >
-                    ঢাকার বাইরে (৳{settings.outsideDhakaDeliveryFee})
+                    <span>ঢাকার বাইরে</span>
+                    <span className="text-[10px] text-neutral-500 font-normal">৳{settings.outsideDhakaDeliveryFee}</span>
                   </button>
                 </div>
               </div>
@@ -387,7 +392,7 @@ export const CartPage: React.FC = () => {
             </form>
 
             {/* Sample Coupons hint */}
-            <div className="text-[11px] text-[#523A35] bg-[#FAF8F4] p-2.5 rounded-lg border border-[#EDE5D9] flex items-center gap-2">
+            <div className="text-[11px] text-[#523A35] bg-[#FAF8F5] p-2.5 rounded-xl border border-[#EDE5D9] flex items-center gap-2">
               <Tag className="w-3.5 h-3.5 text-[#C59B48] shrink-0" />
               <span>
                 কুপন ব্যবহার করুন: <span className="font-bold text-[#6B0812]">DONIYA10</span> (১০% ছাড়) অথবা <span className="font-bold text-[#6B0812]">FASHION50</span> (৳৫০ ছাড়)
@@ -397,7 +402,7 @@ export const CartPage: React.FC = () => {
             {/* Proceed to Checkout CTA */}
             <button
               onClick={() => navigateTo('checkout')}
-              className="w-full py-3.5 px-4 bg-linear-to-r from-[#850B16] via-[#6B0812] to-[#54050D] hover:from-[#960D19] hover:to-[#6B0812] active:scale-[0.98] text-white text-xs sm:text-sm font-bold rounded-xl shadow-[0_6px_20px_-4px_rgba(107,8,18,0.35)] transition-all flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full min-h-[48px] sm:min-h-[52px] py-3.5 px-4 bg-linear-to-r from-[#850B16] via-[#6B0812] to-[#54050D] hover:from-[#960D19] hover:to-[#6B0812] active:scale-[0.98] text-white text-xs sm:text-sm font-bold rounded-2xl shadow-[0_6px_20px_-4px_rgba(107,8,18,0.35)] transition-all flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A5A10]"
             >
               <span>চেকআউটে এগিয়ে যান</span>
               <ArrowRight className="w-4 h-4" />

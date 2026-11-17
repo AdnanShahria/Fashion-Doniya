@@ -431,7 +431,7 @@ export const ShopPage: React.FC = () => {
                   >
                     <Link
                       to={productHref}
-                      className="w-full sm:w-44 aspect-[4/3] shrink-0 rounded-lg overflow-hidden border border-[#EDE5D9] cursor-pointer bg-[#FAF6F0] block"
+                      className="w-full sm:w-44 aspect-[4/3] shrink-0 rounded-lg overflow-hidden border border-[#EDE5D9] cursor-pointer bg-[#FAF8F5] block"
                     >
                       {listImage ? (
                         <img

@@ -33,7 +33,7 @@ function mapCustomerRow(row: typeof users.$inferSelect): CustomerUser {
   return {
     id: row.id,
     fullName: row.fullName,
-    phone: row.phone,
+    phone: row.phone && !row.phone.startsWith('no-phone-') ? row.phone : '',
     altPhone,
     email: row.email || undefined,
     district: row.district || undefined,
@@ -269,10 +269,11 @@ async function upsertAdminCustomer(
   }
 
   const targetId = id && !id.startsWith('cust-order-') ? id : `cust-${Date.now()}`;
+  const phoneToSave = normPhone || `no-phone-${targetId.replace(/^cust-/, '')}`;
   await db.insert(users).values({
     id: targetId,
     fullName: updates.fullName || 'Customer',
-    phone: normPhone,
+    phone: phoneToSave,
     email: updates.email || null,
     role: 'user',
     status: updates.status === 'blocked' ? 'blocked' : 'active',

@@ -181,7 +181,13 @@ export const measurementService = {
       additionalPricePerYard:
         typeof cfg.additionalPricePerYard === 'number' && cfg.additionalPricePerYard > 0
           ? cfg.additionalPricePerYard
-          : effectivePrice
+          : effectivePrice,
+      supportedOutfits:
+        Array.isArray(cfg.supportedOutfits) && cfg.supportedOutfits.length > 0
+          ? cfg.supportedOutfits
+          : Array.isArray(product.supportedOutfits) && product.supportedOutfits.length > 0
+          ? product.supportedOutfits
+          : defaults.supportedOutfits
     };
   },
 

@@ -22,8 +22,32 @@ import {
   Upload,
   Image as ImageIcon,
   Scissors,
-  Shirt
+  Shirt,
+  Check
 } from 'lucide-react';
+
+const ALL_DEFAULT_OUTFITS = ['kameez', 'short_kameez', 'kurti', 'kamiz_dupatta', 'gown', 'lehenga', 'saree'];
+
+const isValidImageUrl = (url?: string | null): boolean => {
+  if (!url) return false;
+  return (
+    url.startsWith('http://') ||
+    url.startsWith('https://') ||
+    url.startsWith('data:image/') ||
+    url.startsWith('/images/') ||
+    url.startsWith('/src/')
+  );
+};
+
+const resolveProductImage = (candidate?: string | null, product?: Partial<Product>): string => {
+  if (isValidImageUrl(candidate)) {
+    return candidate!;
+  }
+  if (product) {
+    return getUniqueProductFabricImage(product as Product);
+  }
+  return '';
+};
 
 export const AdminProducts: React.FC = () => {
   const { products, refreshData, showToast } = useStore();
@@ -58,7 +82,8 @@ export const AdminProducts: React.FC = () => {
     isBestSeller: false,
     isNewArrival: true,
     isActive: true,
-    images: []
+    images: [],
+    supportedOutfits: ALL_DEFAULT_OUTFITS
   });
 
   const handleOpenAddModal = () => {
@@ -89,6 +114,7 @@ export const AdminProducts: React.FC = () => {
       isNewArrival: true,
       isActive: true,
       images: [],
+      supportedOutfits: ALL_DEFAULT_OUTFITS,
       customMeasurementConfig: getDefaultProductCustomConfig('কামিজ', '3.5', 250)
     });
     setIsModalOpen(true);
@@ -97,12 +123,49 @@ export const AdminProducts: React.FC = () => {
   const handleOpenEditModal = (prod: Product) => {
     setEditingProduct(prod);
     setImageUrlInput('');
+    const initialSupportedOutfits =
+      prod.supportedOutfits && prod.supportedOutfits.length > 0
+        ? prod.supportedOutfits
+        : prod.customMeasurementConfig?.supportedOutfits && prod.customMeasurementConfig.supportedOutfits.length > 0
+        ? prod.customMeasurementConfig.supportedOutfits
+        : ALL_DEFAULT_OUTFITS;
+
     setFormData({
       ...prod,
       images: prod.images ? [...prod.images] : [],
-      customMeasurementConfig: getProductCustomMeasurementConfig(prod)
+      supportedOutfits: initialSupportedOutfits,
+      customMeasurementConfig: {
+        ...getProductCustomMeasurementConfig(prod),
+        supportedOutfits: initialSupportedOutfits
+      }
     });
     setIsModalOpen(true);
+  };
+
+  const toggleOutfitSupport = (outfitId: string) => {
+    const current = formData.supportedOutfits ?? ALL_DEFAULT_OUTFITS;
+    const exists = current.includes(outfitId);
+    const updated = exists
+      ? current.filter((id) => id !== outfitId)
+      : [...current, outfitId];
+    setFormData((prev) => ({
+      ...prev,
+      supportedOutfits: updated
+    }));
+  };
+
+  const handleSelectAllOutfits = () => {
+    setFormData((prev) => ({
+      ...prev,
+      supportedOutfits: ALL_DEFAULT_OUTFITS
+    }));
+  };
+
+  const handleDeselectAllOutfits = () => {
+    setFormData((prev) => ({
+      ...prev,
+      supportedOutfits: []
+    }));
   };
 
   const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -171,6 +234,19 @@ export const AdminProducts: React.FC = () => {
       return;
     }
 
+    const finalSupportedOutfits =
+      formData.supportedOutfits && formData.supportedOutfits.length > 0
+        ? formData.supportedOutfits
+        : ALL_DEFAULT_OUTFITS;
+
+    const baseCustomConfig =
+      formData.customMeasurementConfig ||
+      getDefaultProductCustomConfig(
+        formData.category || 'কামিজ',
+        (formData.fabricWidth as FabricWidth) || '3.5',
+        Number(formData.discountPrice || formData.pricePerYard)
+      );
+
     const productToSave: Product = {
       id: editingProduct ? editingProduct.id : `prod-${Date.now()}`,
       slug: formData.slug?.trim() || undefined,
@@ -196,17 +272,15 @@ export const AdminProducts: React.FC = () => {
       isNewArrival: !!formData.isNewArrival,
       isActive: formData.isActive !== false,
       images: formData.images || [],
+      supportedOutfits: finalSupportedOutfits,
       seoTitle: formData.seoTitle?.trim() || undefined,
       seoDescription: formData.seoDescription?.trim() || undefined,
       seoKeywords: formData.seoKeywords?.trim() || undefined,
       imageAlt: formData.imageAlt?.trim() || undefined,
-      customMeasurementConfig:
-        formData.customMeasurementConfig ||
-        getDefaultProductCustomConfig(
-          formData.category || 'কামিজ',
-          (formData.fabricWidth as FabricWidth) || '3.5',
-          Number(formData.discountPrice || formData.pricePerYard)
-        )
+      customMeasurementConfig: {
+        ...baseCustomConfig,
+        supportedOutfits: finalSupportedOutfits
+      }
     };
 
     try {
@@ -300,21 +374,23 @@ export const AdminProducts: React.FC = () => {
               {filteredProducts.map((product) => {
                 const effectivePrice = product.discountPrice || product.pricePerYard;
                 const firstImage = product.images && product.images.length > 0 ? product.images[0] : null;
+                const resolvedThumb = resolveProductImage(firstImage, product);
                 return (
                   <tr key={product.id} className="hover:bg-[#FAF8F4]/50">
                     <td className="p-3">
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-md overflow-hidden border border-[#EDE5D9] shrink-0 bg-[#FAF8F4]">
-                          {firstImage ? (
-                            <img src={firstImage} alt={product.imageAlt || product.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <FabricPatternVisual
-                              patternType={product.patternType}
-                              colorHex={product.colorHex}
-                              fabricWidth={product.fabricWidth}
-                              aspectRatio="square"
-                            />
-                          )}
+                          <img
+                            src={resolvedThumb}
+                            alt={product.imageAlt || product.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              const fallback = getUniqueProductFabricImage(product);
+                              if (e.currentTarget.src !== fallback) {
+                                e.currentTarget.src = fallback;
+                              }
+                            }}
+                          />
                         </div>
                         <div>
                           <span className="font-bold text-[#242424] block">{product.name}</span>
@@ -575,6 +651,9 @@ export const AdminProducts: React.FC = () => {
                       className="flex-1 bg-[#FAF8F4] border border-[#EDE5D9] rounded-lg px-3 py-1.5 font-mono text-xs"
                     />
                   </div>
+                  <p className="mt-1.5 text-[11px] text-[#242424]/70 leading-relaxed bg-[#FAF8F4] p-1.5 rounded border border-[#EDE5D9]/60">
+                    💡 কালার কোড (Hex) কাপড়ের মৌলিক রঙ নির্ধারণ করে। এটি দিয়ে পাবলিক পেজে স্বয়ংক্রিয় ৩ডি পোশাক প্রিভিউ রঙিন হয় এবং ছবি ছাড়া টেক্সচার তৈরি হয়।
+                  </p>
                 </div>
 
                 <div>
@@ -640,38 +719,63 @@ export const AdminProducts: React.FC = () => {
 
                 {formData.images && formData.images.length > 0 && (
                   <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5 pt-1">
-                    {formData.images.map((imgUrl, idx) => (
-                      <div
-                        key={`${imgUrl}-${idx}`}
-                        className="relative group aspect-square rounded-lg overflow-hidden border border-[#EDE5D9] bg-white"
-                      >
-                        <img
-                          src={imgUrl}
-                          alt={`Product ${idx + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveImage(idx)}
-                          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 text-white flex items-center justify-center opacity-90 hover:bg-rose-600 cursor-pointer"
-                          title="ছবি সরান"
+                    {formData.images.map((imgUrl, idx) => {
+                      const fallbackProd = {
+                        id: formData.id || 'preview',
+                        name: formData.name || 'পণ্য',
+                        description: '',
+                        sku: formData.sku || 'FD-001',
+                        fabricWidth: (formData.fabricWidth as FabricWidth) || '3.5',
+                        category: formData.category || 'কামিজ',
+                        fabricType: formData.fabricType || 'পিওর কটন',
+                        color: formData.color || 'ক্রিম',
+                        colorHex: formData.colorHex || '#C5A46D',
+                        availableColors: formData.availableColors || [],
+                        pricePerYard: Number(formData.pricePerYard) || 250,
+                        stockYards: 100,
+                        minOrderQuantity: 1.5,
+                        stepYard: 0.5,
+                        images: [],
+                        patternType: (formData.patternType as any) || 'cotton',
+                        isFeatured: false,
+                        isBestSeller: false,
+                        isNewArrival: true,
+                        isActive: true
+                      } as Product;
+                      const resolvedImg = resolveProductImage(imgUrl, fallbackProd);
+                      return (
+                        <div
+                          key={`${imgUrl}-${idx}`}
+                          className="relative group aspect-square rounded-lg overflow-hidden border border-[#EDE5D9] bg-white"
                         >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
+                          <img
+                            src={resolvedImg}
+                            alt={`Product ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              const fallback = getUniqueProductFabricImage(fallbackProd);
+                              if (e.currentTarget.src !== fallback) {
+                                e.currentTarget.src = fallback;
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveImage(idx)}
+                            className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 text-white flex items-center justify-center opacity-90 hover:bg-rose-600 cursor-pointer"
+                            title="ছবি সরান"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
                 {/* Live Outfit Garment Auto-Preview from Admin's Fabric Photo */}
                 {(() => {
-                  const customImgs = (formData.images || []).filter(
-                    (img) =>
-                      img.startsWith('http://') ||
-                      img.startsWith('https://') ||
-                      img.startsWith('data:image/') ||
-                      img.startsWith('/')
-                  );
+                  const customImgs = (formData.images || []).filter(isValidImageUrl);
                   const previewFabricSrc =
                     customImgs[0] ||
                     getUniqueProductFabricImage({
@@ -699,33 +803,91 @@ export const AdminProducts: React.FC = () => {
                       reviewCount: 1
                     });
 
+                  const currentSupported = formData.supportedOutfits ?? ALL_DEFAULT_OUTFITS;
+
                   return (
-                    <div className="mt-3 p-3 bg-white rounded-xl border border-[#EDE5D9] space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] font-bold text-[#850B1B] flex items-center gap-1.5">
-                          <Shirt className="w-3.5 h-3.5" />
-                          <span>এই কাপড়ের ছবিতে পোশাকের অটো-প্রিভিউ (পাবলিক পেজে যা দেখাবে):</span>
-                        </span>
-                      </div>
-                      <div className="flex items-stretch gap-2 overflow-x-auto pb-1">
-                        {PRODUCT_OUTFIT_OPTIONS.map((outfit) => (
-                          <div
-                            key={outfit.id}
-                            className="w-[74px] shrink-0 rounded-lg overflow-hidden border border-[#DCD3C5] bg-white flex flex-col"
+                    <div className="mt-3 p-3 bg-white rounded-xl border border-[#EDE5D9] space-y-2.5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                          <span className="text-[11px] font-bold text-[#850B1B] flex items-center gap-1.5">
+                            <Shirt className="w-3.5 h-3.5 shrink-0" />
+                            <span>এই কাপড়ের ছবিতে পোশাকের অটো-প্রিভিউ ও অনুমোদন (পাবলিক পেজে যা দেখাবে):</span>
+                          </span>
+                          <p className="text-[10px] text-[#242424]/60">
+                            যেসব পোশাকে টিক (✓) থাকবে, কাস্টমার শুধুমাত্র সেগুলো বানানোর অপশন দেখতে পাবেন। ক্লিক করে বন্ধ/চালু করুন।
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                          <button
+                            type="button"
+                            onClick={handleSelectAllOutfits}
+                            className="text-[10px] font-semibold text-[#850B1B] hover:bg-[#850B1B]/10 border border-[#850B1B]/30 px-2 py-0.5 rounded cursor-pointer transition-colors"
                           >
-                            <div className="aspect-[3/4] w-full bg-[#FAF3E8] overflow-hidden">
-                              <DynamicFabricGarmentImage
-                                templateSrc={outfit.image}
-                                fabricSrc={previewFabricSrc}
-                                alt={outfit.name}
-                                className="w-full h-full object-cover"
-                              />
+                            সকল নির্বাচন করুন
+                          </button>
+                          <span className="text-[#EDE5D9]">|</span>
+                          <button
+                            type="button"
+                            onClick={handleDeselectAllOutfits}
+                            className="text-[10px] font-semibold text-[#242424]/70 hover:text-[#242424] hover:bg-neutral-100 border border-neutral-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                          >
+                            সব আনচেক করুন
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-stretch gap-2.5 overflow-x-auto pb-1.5 pt-0.5 scrollbar-thin">
+                        {PRODUCT_OUTFIT_OPTIONS.map((outfit) => {
+                          const isSupported = currentSupported.includes(outfit.id);
+                          return (
+                            <div
+                              key={outfit.id}
+                              onClick={() => toggleOutfitSupport(outfit.id)}
+                              className={`group w-[80px] sm:w-[86px] shrink-0 rounded-lg overflow-hidden border cursor-pointer relative flex flex-col transition-all select-none ${
+                                isSupported
+                                  ? 'border-2 border-[#850B1B] shadow-sm bg-white'
+                                  : 'border border-[#DCD3C5] bg-neutral-100 opacity-40 grayscale hover:opacity-75'
+                              }`}
+                              title={isSupported ? `${outfit.name} নির্বাচিত (ক্লিক করে বাদ দিন)` : `${outfit.name} বন্ধ (ক্লিক করে নির্বাচন করুন)`}
+                            >
+                              {/* Top-Right Tickable Checkbox Badge */}
+                              <div className="absolute top-1 right-1 z-10">
+                                <span
+                                  className={`w-4 h-4 rounded flex items-center justify-center transition-colors shadow-xs ${
+                                    isSupported
+                                      ? 'bg-[#850B1B] text-white'
+                                      : 'border border-neutral-400 bg-white/95 text-transparent'
+                                  }`}
+                                >
+                                  {isSupported ? (
+                                    <Check className="w-3 h-3 stroke-[3]" />
+                                  ) : (
+                                    <span className="w-2 h-2 rounded-xs" />
+                                  )}
+                                </span>
+                              </div>
+
+                              <div className="aspect-[3/4] w-full bg-[#FAF3E8] overflow-hidden relative">
+                                <DynamicFabricGarmentImage
+                                  templateSrc={outfit.image}
+                                  fabricSrc={previewFabricSrc}
+                                  colorTintHex={formData.colorHex}
+                                  alt={outfit.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <div
+                                className={`py-1 px-1 text-center font-bold text-[10px] truncate transition-colors ${
+                                  isSupported
+                                    ? 'bg-[#850B1B] text-white'
+                                    : 'bg-[#F5EDE1] text-[#1C1B19]'
+                                }`}
+                              >
+                                {outfit.name}
+                              </div>
                             </div>
-                            <div className="py-1 px-1 text-center font-bold text-[10px] bg-[#F5EDE1] text-[#1C1B19] truncate">
-                              {outfit.name}
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   );

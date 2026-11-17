@@ -17,6 +17,7 @@ import { AdminPromotions } from './AdminPromotions';
 import { AdminMeasurements } from './AdminMeasurements';
 import { AdminCustomRequests } from './AdminCustomRequests';
 import { AdminSettings } from './AdminSettings';
+import { AdminFooter } from './AdminFooter';
 import {
   LayoutDashboard,
   Home,
@@ -26,6 +27,7 @@ import {
   Users,
   FileText,
   Compass,
+  PanelBottom,
   Globe,
   Tag,
   Ruler,
@@ -401,6 +403,12 @@ export const AdminLayout: React.FC = () => {
             icon: Compass,
           },
           {
+            id: 'footer',
+            label: 'ফুটার ও সোশ্যাল কন্ট্রোল',
+            subtitle: 'কার্ভড ডিজাইন ও সোশ্যাল মিডিয়া সিঙ্ক',
+            icon: PanelBottom,
+          },
+          {
             id: 'seo',
             label: 'এসইও (SEO) কেন্দ্র',
             subtitle: 'মেটা ট্যাগ ও ইনডেক্সিং',
@@ -566,6 +574,8 @@ export const AdminLayout: React.FC = () => {
         return <AdminContent />;
       case 'navigation':
         return <AdminNavigation />;
+      case 'footer':
+        return <AdminFooter />;
       case 'seo':
         return <AdminSeo />;
       case 'promotions':

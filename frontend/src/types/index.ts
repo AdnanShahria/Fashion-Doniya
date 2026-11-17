@@ -25,6 +25,7 @@ export interface ProductCustomMeasurementConfig {
   applicableFields: CustomMeasurementFieldKey[];
   measurementInstructions: string;
   additionalPricePerYard?: number; // Price per additional Gaj beyond standardGaj (defaults to product effective price)
+  supportedOutfits?: string[];
 }
 
 export interface AddonFabricOption {
@@ -102,6 +103,7 @@ export interface Product {
   rating?: number;
   reviewCount?: number;
   customMeasurementConfig?: ProductCustomMeasurementConfig;
+  supportedOutfits?: string[];
   seoTitle?: string;
   seoDescription?: string;
   seoKeywords?: string;
@@ -165,7 +167,7 @@ export interface FabricCategoryRecord {
 export interface FabricCategoryDesignSettingsRecord {
   id: string;
   collection_type: FabricCollectionType;
-  backgroundColor: string; // default '#FAF6F0'
+  backgroundColor: string; // default '#FAF8F5'
   cardBackgroundColor: string; // default '#FFFDF9'
   textColor: string; // default '#850B1B'
   bodyTextColor: string; // default '#4A2C2A'
@@ -383,9 +385,21 @@ export interface PaymentSettings {
   bkash: MfsPaymentMethodConfig;
   nagad: MfsPaymentMethodConfig;
   cod: CodPaymentMethodConfig;
+  rocket?: MfsPaymentMethodConfig;
+  upay?: MfsPaymentMethodConfig;
 }
 
-export type PaymentMethod = 'cod' | 'bkash' | 'nagad' | 'Cash on Delivery' | 'bKash' | 'Nagad';
+export type PaymentMethod =
+  | 'cod'
+  | 'bkash'
+  | 'nagad'
+  | 'rocket'
+  | 'upay'
+  | 'Cash on Delivery'
+  | 'bKash'
+  | 'Nagad'
+  | 'Rocket'
+  | 'Upay';
 
 export type PaymentStatus =
   | 'pending_verification'
@@ -642,6 +656,55 @@ export interface FooterContentConfig {
   trustBadge1Sub?: string;
 }
 
+export interface FooterQuickLinkItem {
+  id: string;
+  title: string;
+  url: string;
+  isActive: boolean;
+}
+
+export interface FooterSocialLinkItem {
+  id: string;
+  platform: 'facebook' | 'instagram' | 'youtube' | 'tiktok' | 'whatsapp' | 'twitter' | 'linkedin' | 'telegram' | 'custom';
+  label: string;
+  url: string;
+  isActive: boolean;
+  handle?: string;
+}
+
+export interface FooterBottomLinkItem {
+  id: string;
+  title: string;
+  url: string;
+  isActive: boolean;
+}
+
+export interface FooterConfig {
+  logoUrl?: string;
+  title?: string;
+  tagline?: string;
+  aboutDesc?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  workingHours?: string;
+  quickLinks: FooterQuickLinkItem[];
+  socialLinks: FooterSocialLinkItem[];
+  socialHighlightText?: string;
+  socialHighlightUrl?: string;
+  socialHighlightEnabled?: boolean;
+  newsletterEnabled?: boolean;
+  newsletterTitle?: string;
+  newsletterDesc?: string;
+  newsletterBtnText?: string;
+  newsletterPlaceholder?: string;
+  copyrightText?: string;
+  showPartnerBadge?: boolean;
+  bottomLinks: FooterBottomLinkItem[];
+  showServiceFeatures?: boolean;
+  curvedContainer?: boolean;
+}
+
 export interface WebsiteContentConfig {
   aboutPage: AboutPageContentConfig;
   contactPage: ContactPageContentConfig;
@@ -780,6 +843,7 @@ export interface StoreSettings {
   facebookUrl: string;
   instagramUrl: string;
   youtubeUrl?: string;
+  tiktokUrl?: string;
   maintenanceMode?: boolean;
   maintenanceMessage?: string;
   coupons: Coupon[];
@@ -791,6 +855,7 @@ export interface StoreSettings {
   campaigns?: PromotionCampaign[];
   floatingWidgetConfig?: FloatingWidgetConfig;
   addonFabricCollections?: Record<string, AddonFabricOption[]>;
+  footerConfig?: FooterConfig;
 }
 
 export interface CustomerUser {
@@ -884,6 +949,7 @@ export type AdminTab =
   | 'customers'
   | 'content'
   | 'navigation'
+  | 'footer'
   | 'seo'
   | 'promotions'
   | 'measurements'
