@@ -267,6 +267,7 @@ seoRouter.post('/ping', async (c) => {
         keyLocation: `${siteUrl}/${key}.txt`,
         urlList,
       }),
+      signal: AbortSignal.timeout(3000),
     });
     return c.json({ success: resp.ok, status: resp.status, submitted: urlList.length });
   } catch (err) {

@@ -219,7 +219,11 @@ async function handleVerifyAndTrackOrder(c: Context<AppEnv>) {
   const db = c.get('db');
   let matchedRow = await db.select().from(orders).where(eq(orders.orderNumber, cleanOrderId)).get();
   if (!matchedRow) {
-    matchedRow = await db.select().from(orders).where(eq(orders.id, cleanOrderId)).get();
+    matchedRow = await db
+      .select()
+      .from(orders)
+      .where(or(eq(orders.id, rawOrderId), eq(orders.id, cleanOrderId)))
+      .get();
   }
 
   if (!matchedRow) {
